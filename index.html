@@ -20,7 +20,7 @@
     <!-- 啟動選單 -->
     <div id="menu">
         <h2 style="text-align:center; margin-top:0;">🎮 放置天堂外掛啟動器</h2>
-        <p style="text-align:center; color:#aaa; font-size:12px;">行動端專屬雲端打包版本</p>
+        <p style="text-align:center; color:#aaa; font-size:12px;">行動端專屬直連版本</p>
         
         <div class="group">
             <label>選擇遊戲伺服器：</label>
@@ -30,23 +30,17 @@
             </select>
         </div>
 
-        <div class="group">
-            <label>外掛腳本網址：</label>
-            <input type="text" id="script-url" value="https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js">
-        </div>
-
-        <button onclick="launchGame()">🚀 啟動遊戲並載入外掛</button>
+        <button onclick="launchGame()">🚀 立即啟動遊戲與外掛</button>
     </div>
 
     <!-- 遊戲載入畫面 -->
     <div id="game-container">
-        <iframe id="game-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+        <iframe id="game-frame"></iframe>
     </div>
 
 <script>
-    async function launchGame() {
+    function launchGame() {
         const gameUrl = document.getElementById('server-select').value;
-        const scriptUrl = document.getElementById('script-url').value.trim();
 
         document.getElementById('menu').style.display = 'none';
         const container = document.getElementById('game-container');
@@ -55,24 +49,19 @@
         const frame = document.getElementById('game-frame');
         frame.src = gameUrl;
 
-        frame.onload = async function() {
-            if (!scriptUrl) return;
+        // 當遊戲頁面載入完成後，直接透過標準 script 標籤植入外掛
+        frame.onload = function() {
             try {
-                const proxyUrl = "https://corsfix.com?" + scriptUrl;
-                const response = await fetch(proxyUrl);
-                let code = await response.text();
-
-                if (code.includes('==UserScript==')) {
-                    const endIndex = code.indexOf('==/UserScript==');
-                    if (endIndex !== -1) code = code.substring(endIndex + 15);
-                }
-
                 const win = frame.contentWindow;
+                if (!win) return;
+
                 const scriptEl = win.document.createElement('script');
-                scriptEl.textContent = code;
+                // 直接指向外掛的 jsDelivr 或是 Raw 穩定通道
+                scriptEl.src = "https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js";
                 win.document.head.appendChild(scriptEl);
+                console.log("外掛腳本已成功強制注入！");
             } catch (e) {
-                console.error("外掛載入失敗：", e);
+                console.error("外掛注入遭遇瀏覽器權限限制：", e);
             }
         };
     }
