@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>放置天堂雙外掛頂級啟動器</title>
+    <title>放置天堂雙外掛終極啟動器</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; background: #121212; color: #e0e0e0; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #121212; color: #e0e0e0; }
         #menu { padding: 30px; max-width: 480px; margin: 50px auto; background: #1e1e1e; border-radius: 14px; box-shadow: 0 8px 25px rgba(0,0,0,0.7); border: 1px solid #333; }
         .group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; color: #00adb5; font-weight: bold; font-size: 15px; }
@@ -18,12 +18,12 @@
 </head>
 <body>
 
-    <div id="status-bar">正在安全載入雙外掛注入層...</div>
+    <div id="status-bar">正在載入遊戲與注入雙外掛...</div>
 
     <!-- 啟動選單 -->
     <div id="menu">
-        <h2 style="text-align:center; margin-top:0; color:#fff;">🎮 放置天堂頂級外掛啟動器</h2>
-        <p style="text-align:center; color:#888; font-size:13px; margin-bottom:25px;">Android 獨立應用程式專用版本</p>
+        <h2 style="text-align:center; margin-top:0; color:#fff;">🎮 放置天堂雙外掛終極啟動器</h2>
+        <p style="text-align:center; color:#888; font-size:13px; margin-bottom:25px;">Android APK 專用無縫注入版</p>
         
         <div class="group">
             <label>選擇遊戲伺服器：</label>
@@ -33,55 +33,60 @@
             </select>
         </div>
 
-        <button onclick="launchGame()">🚀 啟動遊戲並強行注入雙外掛</button>
+        <button onclick="launchGame()">🚀 啟動遊戲並載入雙外掛</button>
     </div>
 
     <!-- 遊戲載入畫面 -->
     <div id="game-container">
-        <iframe id="game-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+        <iframe id="game-frame"></iframe>
     </div>
 
 <script>
-    function launchGame() {
+    async function launchGame() {
         const gameUrl = document.getElementById('server-select').value;
+        const statusBar = document.getElementById('status-bar');
 
         document.getElementById('menu').style.display = 'none';
-        document.getElementById('status-bar').style.display = 'block';
-        const container = document.getElementById('game-container');
-        container.style.display = 'block';
+        statusBar.style.display = 'block';
+        document.getElementById('game-container').style.display = 'block';
 
         const frame = document.getElementById('game-frame');
-        frame.src = gameUrl;
 
-        // 當遊戲頁面載入完成後，強制注入雙外掛並顯示狀態
-        frame.onload = function() {
-            try {
-                const win = frame.contentWindow;
-                if (!win) {
-                    document.getElementById('status-bar.').innerText = '載入警告：無法取得視窗物件';
-                    return;
-                }
+        try {
+            statusBar.innerText = '正在抓取遊戲主體並融合外掛...';
+            
+            // 透過 fetch 抓取遊戲頁面原始碼
+            const response = await fetch(gameUrl);
+            let html = await response.text();
 
-                // 1. 注入主外掛
-                const script1 = win.document.createElement('script');
-                script1.src = "https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js";
-                win.document.head.appendChild(script1);
+            // 準備要注入的外掛標籤與 Base 標籤
+            const injectContent = `
+                <base href="${gameUrl}">
+                <!-- 主外掛腳本 -->
+                <script src="https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js"><\/script>
+                <!-- GM 商店腳本 -->
+                <script src="https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=${Date.now()}"><\/script>
+            `;
 
-                // 2. 注入 GM 商店外掛 (附帶時間戳記防快取)
-                const script2 = win.document.createElement('script');
-                script2.src = "https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=" + Date.now();
-                win.document.head.appendChild(script2);
-
-                document.getElementById('status-bar').innerText = '✅ 雙外掛已成功並行強行注入！';
-                setTimeout(() => {
-                    document.getElementById('status-bar').style.display = 'none';
-                }, 4000);
-
-            } catch (e) {
-                console.error("外掛注入攔截：", e);
-                document.getElementById('status-bar').innerText = '⚠️ 偵測到跨域限制，APK 內核已啟動略過防護。';
+            // 將注入內容放在 <head> 標籤的最上方
+            if (html.includes('<head>')) {
+                html = html.replace('<head>', '<head>' + injectContent);
+            } else {
+                html = injectContent + html;
             }
-        };
+
+            // 將融合後的 HTML 直接寫入 iframe
+            frame.srcdoc = html;
+
+            statusBar.innerText = '✅ 遊戲與雙外掛已完美融合載入！';
+            setTimeout(() => { statusBar.style.display = 'none'; }, 3000);
+
+        } catch (err) {
+            console.error('Fetch 代理注入失敗，切換為標準載入:', err);
+            statusBar.innerText = '⚠️ 切換至標準模式載入遊戲...';
+            frame.src = gameUrl;
+            setTimeout(() => { statusBar.style.display = 'none'; }, 3000);
+        }
     }
 </script>
 </body>
