@@ -11,18 +11,13 @@ jobs:
       - name: 檢出專案程式碼
         uses: actions/checkout@v3
 
-      - name: 設定 Node.js 環境
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-
-      - name: 使用 Bubblewrap / WebAPK 雲端轉檔工具
+      - name: 打包網頁資產
         run: |
-          npm install -g @line/bull
-          echo "正在準備將網頁打包為 Android APK..."
+          mkdir -p dist
+          cp index.html dist/
 
-      - name: 產出並上傳 APK 構建產物
+      - name: 上傳打包產物
         uses: actions/upload-artifact@v3
         with:
-          name: GameLauncher-APK
-          path: .
+          name: GameLauncher-Web
+          path: dist/
