@@ -38,26 +38,31 @@ jobs:
           rm -rf myApp/www/*
           cp index.html myApp/www/index.html
 
-      - name: 強制解開 WebView 跨域與安全限制
+      - name: 精準修正並配置 Android 資源檔 (修復 AAPT 編譯錯誤)
         run: |
           cd myApp
           python3 -c "
-          with open('config.xml', 'r') as f:
-              content = f.read()
-          
-          # 注入全權限與略過安全策略的偏好設定
-          security_prefs = '''
-              <preference name=\"AllowInlineMediaPlayback\" value=\"true\" />
-              <preference name=\"AndroidInsecureFileModeEnabled\" value=\"true\" />
-              <preference name=\"webviewbounce\" value=\"false\" />
-              <preference name=\"DisallowOverscroll\" value=\"true\" />
-              <preference name=\"BackgroundColor\" value=\"0xff000000\" />
-          '''
-          
-          content = content.replace('</widget>', security_prefs + '</widget>')
-          
-          with open('config.xml', 'w') as f:
-              f.write(content)
+          import xml.etree.ElementTree as ET
+
+          tree = ET.parse('config.xml')
+          root = tree.getroot()
+
+          # 新增全域導向權限
+          nav = ET.Element('allow-navigation', {'href': '*'})
+          root.append(nav)
+
+          # 新增相容性偏好設定 (顏色採標準六位十六進位制 #000000)
+          prefs = [
+              ('AllowInlineMediaPlayback', 'true'),
+              ('BackgroundColor', '#000000'),
+              ('DisallowOverscroll', 'true')
+          ]
+
+          for name, val in prefs:
+              pref = ET.Element('preference', {'name': name, 'value': val})
+              root.append(pref)
+
+          tree.write('config.xml', encoding='utf-8', xml_declaration=True)
           "
 
       - name: 編譯 Android Debug APK
