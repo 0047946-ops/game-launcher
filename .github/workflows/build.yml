@@ -17,13 +17,20 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 自動建構原生 Android 專案結構與核心注入腳本
+      - name: 設定 Android SDK 環境
+        uses: android-actions/setup-android@v3
+
+      - name: 建構原生 Android 專案結構
         run: |
           mkdir -p app/src/main/java/com/idle/lineage/launcher
           mkdir -p app/src/main/assets
 
-          # 複製選單頁面至原生 Assets 目錄
-          cp index.html app/src/main/assets/index.html
+          # 確保複製 index.html 至原生資源目錄
+          if [ -f "index.html" ]; then
+            cp index.html app/src/main/assets/index.html
+          else
+            echo "Error: index.html not found!" && exit 1
+          fi
 
           # 建立 settings.gradle
           cat << 'EOF' > settings.gradle
@@ -45,18 +52,28 @@ jobs:
           include ':app'
           EOF
 
-          # 建立根目錄 build.gradle
+          # 建立 build.gradle (根目錄)
           cat << 'EOF' > build.gradle
-          plugins {
-              id 'com.android.application' version '8.2.2' apply false
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.1'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
           EOF
 
           # 建立 app/build.gradle
           cat << 'EOF' > app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
+          apply plugin: 'com.android.application'
 
           android {
               namespace 'com.idle.lineage.launcher'
@@ -113,7 +130,7 @@ jobs:
           </manifest>
           EOF
 
-          # 建立 MainActivity.java (核心原生 JavaScript 注入邏輯)
+          # 建立 MainActivity.java (原生 JavaScript 注入邏輯)
           cat << 'EOF' > app/src/main/java/com/idle/lineage/launcher/MainActivity.java
           package com.idle.lineage.launcher;
 
@@ -146,7 +163,7 @@ jobs:
                       public void onPageFinished(WebView view, String url) {
                           super.onPageFinished(view, url);
                           
-                          // 僅在進入遊戲遠端伺服器頁面時進行原生注入
+                          // 當進入遊戲遠端伺服器網址時，觸發原生層 JavaScript 強制注入
                           if (url != null && url.startsWith("http")) {
                               String js1 = "if(!window.__main_plugin_loaded){ window.__main_plugin_loaded=true; var s1 = document.createElement('script'); s1.src = 'https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js'; document.head.appendChild(s1); }";
                               String js2 = "if(!window.__gm_shop_loaded){ window.__gm_shop_loaded=true; var s2 = document.createElement('script'); s2.src = 'https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now(); document.head.appendChild(s2); }";
@@ -171,9 +188,10 @@ jobs:
           }
           EOF
 
-      - name: Gradle 編譯 Android APK
+      - name: 建立 Gradle Wrapper 並編譯 APK
         run: |
-          gradle assembleDebug
+          gradle wrapper
+          ./gradlew assembleDebug
 
       - name: 上傳編譯完成的 APK 檔案
         uses: actions/upload-artifact@v4
