@@ -1,22 +1,50 @@
-name: Build WebAPK
+name: Build Android APK
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
     steps:
       - name: 檢出專案程式碼
         uses: actions/checkout@v4
 
-      - name: 確認檔案結構
-        run: |
-          ls -la
+      - name: 設定 Java 環境 (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: 上傳打包產物
+      - name: 設定 Node.js 環境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 安裝 Cordova 與 Android 工具
+        run: |
+          npm install -g cordova
+          cordova telemetry off
+
+      - name: 建立 Cordova 專案結構
+        run: |
+          cordova create myApp com.idle.lineage.launcher IdleLineageLauncher
+          cd myApp
+          cordova platform add android
+
+      - name: 覆蓋網頁與外掛核心資產
+        run: |
+          rm -rf myApp/www/*
+          cp index.html myApp/www/index.html
+
+      - name: 編譯 Android Debug APK
+        run: |
+          cd myApp
+          cordova build android --debug
+
+      - name: 上傳編譯完成的 APK 檔案
         uses: actions/upload-artifact@v4
         with:
-          name: game-launcher-apk-assets
-          path: index.html
+          name: game-launcher-apk
+          path: myApp/platforms/android/app/build/outputs/apk/debug/app-debug.apk
