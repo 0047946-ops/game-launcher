@@ -36,7 +36,7 @@ jobs:
             echo "Error: index.html not found!" && exit 1
           fi
 
-          # 建立 settings.gradle (全域唯一指定倉庫中心)
+          # 建立 settings.gradle
           cat << 'EOF' > settings.gradle
           pluginManagement {
               repositories {
@@ -56,7 +56,7 @@ jobs:
           include ':app'
           EOF
 
-          # 建立 build.gradle (解決衝突：不再包含全域 allprojects 倉庫設定)
+          # 建立 build.gradle (根目錄)
           cat << 'EOF' > build.gradle
           buildscript {
               repositories {
@@ -64,16 +64,14 @@ jobs:
                   mavenCentral()
               }
               dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.1'
+                  classpath 'com.android.tools.build:gradle:8.2.2'
               }
           }
           EOF
 
-          # 建立 app/build.gradle
+          # 建立 app/build.gradle (純淨原生組態，免第三方庫相依衝突)
           cat << 'EOF' > app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
+          apply plugin: 'com.android.application'
 
           android {
               namespace 'com.idle.lineage.launcher'
@@ -97,14 +95,9 @@ jobs:
                   targetCompatibility JavaVersion.VERSION_17
               }
           }
-
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
-          }
           EOF
 
-          # 建立 AndroidManifest.xml
+          # 建立 AndroidManifest.xml (使用系統內建主題)
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -115,7 +108,7 @@ jobs:
                   android:allowBackup="true"
                   android:label="放置天堂雙外掛啟動器"
                   android:supportsRtl="true"
-                  android:theme="@style/Theme.AppCompat.NoActionBar"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
                   android:usesCleartextTraffic="true">
                   <activity
                       android:name=".MainActivity"
@@ -130,17 +123,17 @@ jobs:
           </manifest>
           EOF
 
-          # 建立 MainActivity.java (原生 WebView 與外掛動態注入核心)
+          # 建立 MainActivity.java (繼承原生 android.app.Activity)
           cat << 'EOF' > app/src/main/java/com/idle/lineage/launcher/MainActivity.java
           package com.idle.lineage.launcher;
 
+          import android.app.Activity;
           import android.os.Bundle;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
-          import androidx.appcompat.app.AppCompatActivity;
 
-          public class MainActivity extends AppCompatActivity {
+          public class MainActivity extends Activity {
               private WebView webView;
 
               @Override
