@@ -1,0 +1,9 @@
+{
+  "name": "idle-lineage-launcher",
+  "version": "1.0.0",
+  "description": "Idle Lineage Mobile APK Launcher",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'Building APK assets...'"
+  }
+}
