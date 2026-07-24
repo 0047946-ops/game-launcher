@@ -9,15 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 檢出專案程式碼
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: 驗證檔案結構
+      - name: 確認檔案結構
         run: |
-          echo "正在檢查專案根目錄檔案..."
           ls -la
 
-      - name: 打包並產出發布檔案
-        uses: actions/upload-artifact@v3
+      - name: 上傳打包產物
+        uses: actions/upload-artifact@v4
         with:
           name: game-launcher-apk-assets
           path: index.html
