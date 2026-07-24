@@ -17,54 +17,166 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 設定 Node.js 環境
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 安裝 Cordova 與 Android 工具
+      - name: 自動建構原生 Android 專案結構與核心注入腳本
         run: |
-          npm install -g cordova
-          cordova telemetry off
+          mkdir -p app/src/main/java/com/idle/lineage/launcher
+          mkdir -p app/src/main/assets
 
-      - name: 建立 Cordova 專案結構
+          # 複製選單頁面至原生 Assets 目錄
+          cp index.html app/src/main/assets/index.html
+
+          # 建立 settings.gradle
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "IdleLineageLauncher"
+          include ':app'
+          EOF
+
+          # 建立根目錄 build.gradle
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+          }
+          EOF
+
+          # 建立 app/build.gradle
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.idle.lineage.launcher'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.idle.lineage.launcher"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+          }
+          EOF
+
+          # 建立 AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="放置天堂雙外掛啟動器"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.AppCompat.NoActionBar"
+                  android:usesCleartextTraffic="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # 建立 MainActivity.java (核心原生 JavaScript 注入邏輯)
+          cat << 'EOF' > app/src/main/java/com/idle/lineage/launcher/MainActivity.java
+          package com.idle.lineage.launcher;
+
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import androidx.appcompat.app.AppCompatActivity;
+
+          public class MainActivity extends AppCompatActivity {
+              private WebView webView;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  
+                  webView = new WebView(this);
+                  setContentView(webView);
+
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setDatabaseEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setAllowContentAccess(true);
+                  settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+                          
+                          // 僅在進入遊戲遠端伺服器頁面時進行原生注入
+                          if (url != null && url.startsWith("http")) {
+                              String js1 = "if(!window.__main_plugin_loaded){ window.__main_plugin_loaded=true; var s1 = document.createElement('script'); s1.src = 'https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js'; document.head.appendChild(s1); }";
+                              String js2 = "if(!window.__gm_shop_loaded){ window.__gm_shop_loaded=true; var s2 = document.createElement('script'); s2.src = 'https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now(); document.head.appendChild(s2); }";
+
+                              view.evaluateJavascript(js1, null);
+                              view.evaluateJavascript(js2, null);
+                          }
+                      }
+                  });
+
+                  webView.loadUrl("file:///android_asset/index.html");
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+      - name: Gradle 編譯 Android APK
         run: |
-          cordova create myApp com.idle.lineage.launcher IdleLineageLauncher
-          cd myApp
-          cordova platform add android
-
-      - name: 覆蓋網頁與外掛核心資產
-        run: |
-          rm -rf myApp/www/*
-          cp index.html myApp/www/index.html
-
-      - name: 安全注入 Cordova 設定 (防破壞 XML 結構)
-        run: |
-          cd myApp
-          python3 -c "
-          with open('config.xml', 'r', encoding='utf-8') as f:
-              content = f.read()
-
-          inject_tags = '''
-              <allow-navigation href=\"*\" />
-              <preference name=\"AllowInlineMediaPlayback\" value=\"true\" />
-              <preference name=\"BackgroundColor\" value=\"#000000\" />
-              <preference name=\"DisallowOverscroll\" value=\"true\" />
-          '''
-
-          if '</widget>' in content:
-              new_content = content.replace('</widget>', inject_tags + '\n</widget>')
-              with open('config.xml', 'w', encoding='utf-8') as f:
-                  f.write(new_content)
-          "
-
-      - name: 編譯 Android Debug APK
-        run: |
-          cd myApp
-          cordova build android --debug
+          gradle assembleDebug
 
       - name: 上傳編譯完成的 APK 檔案
         uses: actions/upload-artifact@v4
         with:
           name: game-launcher-apk
-          path: myApp/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
