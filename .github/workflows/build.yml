@@ -36,6 +36,7 @@ jobs:
             echo "Error: index.html not found!" && exit 1
           fi
 
+          # 建立 settings.gradle (全域唯一指定倉庫中心)
           cat << 'EOF' > settings.gradle
           pluginManagement {
               repositories {
@@ -55,6 +56,7 @@ jobs:
           include ':app'
           EOF
 
+          # 建立 build.gradle (解決衝突：不再包含全域 allprojects 倉庫設定)
           cat << 'EOF' > build.gradle
           buildscript {
               repositories {
@@ -65,16 +67,13 @@ jobs:
                   classpath 'com.android.tools.build:gradle:8.1.1'
               }
           }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
           EOF
 
+          # 建立 app/build.gradle
           cat << 'EOF' > app/build.gradle
-          apply plugin: 'com.android.application'
+          plugins {
+              id 'com.android.application'
+          }
 
           android {
               namespace 'com.idle.lineage.launcher'
@@ -105,6 +104,7 @@ jobs:
           }
           EOF
 
+          # 建立 AndroidManifest.xml
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -130,6 +130,7 @@ jobs:
           </manifest>
           EOF
 
+          # 建立 MainActivity.java (原生 WebView 與外掛動態注入核心)
           cat << 'EOF' > app/src/main/java/com/idle/lineage/launcher/MainActivity.java
           package com.idle.lineage.launcher;
 
