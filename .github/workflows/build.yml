@@ -38,25 +38,23 @@ jobs:
           rm -rf myApp/www/*
           cp index.html myApp/www/index.html
 
-      - name: 開啟 WebView 跨域與混合內容最高權限
+      - name: 強制解開 WebView 跨域與安全限制
         run: |
           cd myApp
-          # 在 config.xml 中強制開啟允許跨域與遠端載入權限
-          sed -i 's|<widget |<widget xmlns:android="http://schemas.android.com/apk/res/android" |g' config.xml
-          
-          # 插入允許混合內容與檔案存取設定
           python3 -c "
           with open('config.xml', 'r') as f:
               content = f.read()
           
-          preference_tags = '''
+          # 注入全權限與略過安全策略的偏好設定
+          security_prefs = '''
               <preference name=\"AllowInlineMediaPlayback\" value=\"true\" />
-              <preference name=\"HideKeyboardFormAccessoryBar\" value=\"false\" />
-              <preference name=\"CordovaWebViewEngine\" value=\"CDVWebViewEngine\" />
+              <preference name=\"AndroidInsecureFileModeEnabled\" value=\"true\" />
+              <preference name=\"webviewbounce\" value=\"false\" />
+              <preference name=\"DisallowOverscroll\" value=\"true\" />
+              <preference name=\"BackgroundColor\" value=\"0xff000000\" />
           '''
           
-          # 在 closing tag 之前插入偏好設定
-          content = content.replace('</widget>', preference_tags + '</widget>')
+          content = content.replace('</widget>', security_prefs + '</widget>')
           
           with open('config.xml', 'w') as f:
               f.write(content)
