@@ -20,7 +20,7 @@ jobs:
       - name: 設定 Node.js 環境
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: 安裝 Cordova 與 Android 工具
         run: |
@@ -38,31 +38,24 @@ jobs:
           rm -rf myApp/www/*
           cp index.html myApp/www/index.html
 
-      - name: 精準修正並配置 Android 資源檔 (修復 AAPT 編譯錯誤)
+      - name: 安全注入 Cordova 設定 (防破壞 XML 結構)
         run: |
           cd myApp
           python3 -c "
-          import xml.etree.ElementTree as ET
+          with open('config.xml', 'r', encoding='utf-8') as f:
+              content = f.read()
 
-          tree = ET.parse('config.xml')
-          root = tree.getroot()
+          inject_tags = '''
+              <allow-navigation href=\"*\" />
+              <preference name=\"AllowInlineMediaPlayback\" value=\"true\" />
+              <preference name=\"BackgroundColor\" value=\"#000000\" />
+              <preference name=\"DisallowOverscroll\" value=\"true\" />
+          '''
 
-          # 新增全域導向權限
-          nav = ET.Element('allow-navigation', {'href': '*'})
-          root.append(nav)
-
-          # 新增相容性偏好設定 (顏色採標準六位十六進位制 #000000)
-          prefs = [
-              ('AllowInlineMediaPlayback', 'true'),
-              ('BackgroundColor', '#000000'),
-              ('DisallowOverscroll', 'true')
-          ]
-
-          for name, val in prefs:
-              pref = ET.Element('preference', {'name': name, 'value': val})
-              root.append(pref)
-
-          tree.write('config.xml', encoding='utf-8', xml_declaration=True)
+          if '</widget>' in content:
+              new_content = content.replace('</widget>', inject_tags + '\n</widget>')
+              with open('config.xml', 'w', encoding='utf-8') as f:
+                  f.write(new_content)
           "
 
       - name: 編譯 Android Debug APK
