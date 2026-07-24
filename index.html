@@ -3,39 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>放置天堂外掛啟動器</title>
+    <title>放置天堂雙外掛啟動器</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; background: #1a1a1a; color: white; display: flex; justify-content: center; align-items: center; }
-        #menu { padding: 30px; width: 90%; max-width: 450px; background: #2a2a2a; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); text-align: center; }
-        .group { margin-bottom: 20px; text-align: left; }
-        label { display: block; margin-bottom: 8px; color: #00adb5; font-weight: bold; font-size: 14px; }
-        select { width: 100%; padding: 14px; box-sizing: border-box; border-radius: 6px; border: 1px solid #444; background: #333; color: white; font-size: 14px; }
-        button { width: 100%; padding: 16px; background: #28a745; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        p { color: #aaa; font-size: 12px; line-height: 1.5; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; background: #1a1a1a; color: white; }
+        #menu { padding: 25px; max-width: 500px; margin: 40px auto; background: #2a2a2a; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #00adb5; font-weight: bold; font-size: 14px; }
+        select, input { width: 100%; padding: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #444; background: #333; color: white; font-size: 14px; }
+        button { width: 100%; padding: 14px; background: #28a745; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        #game-container { width: 100%; height: 100%; display: none; }
+        iframe { width: 100%; height: 100%; border: none; }
     </style>
 </head>
 <body>
 
+    <!-- 啟動選單 -->
     <div id="menu">
-        <h2 style="margin-top:0;">🎮 放置天堂外掛導航器</h2>
-        <p>由於瀏覽器嚴格限制跨域注入，建議安裝手機端支援 Userscript（如 Tampermonkey）的瀏覽器（如 Kiwi Browser），並直接造訪下方伺服器即可完美自動載入外掛！</p>
+        <h2 style="text-align:center; margin-top:0;">🎮 放置天堂雙外掛啟動器</h2>
+        <p style="text-align:center; color:#aaa; font-size:12px;">Android APK 專用多重腳本載入版本</p>
         
         <div class="group">
-            <label>選擇要前往的遊戲伺服器：</label>
+            <label>選擇遊戲伺服器：</label>
             <select id="server-select">
                 <option value="https://shines871.github.io/idle-lineage-class/">伺服器二 (shines871)</option>
                 <option value="https://pp771007.github.io/idle-lineage-class/">伺服器一 (pp771007)</option>
             </select>
         </div>
 
-        <button onclick="openGame()">🚀 直接跳轉至遊戲並啟用外掛</button>
+        <button onclick="launchGame()">🚀 啟動遊戲並載入所有外掛</button>
+    </div>
+
+    <!-- 遊戲載入畫面 -->
+    <div id="game-container">
+        <iframe id="game-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
     </div>
 
 <script>
-    function openGame() {
+    function launchGame() {
         const gameUrl = document.getElementById('server-select').value;
-        // 直接將頁面跳轉至遊戲伺服器
-        window.location.href = gameUrl;
+
+        document.getElementById('menu').style.display = 'none';
+        const container = document.getElementById('game-container');
+        container.style.display = 'block';
+
+        const frame = document.getElementById('game-frame');
+        frame.src = gameUrl;
+
+        // 當遊戲頁面載入完成後，依序注入多個外掛腳本
+        frame.onload = function() {
+            try {
+                const win = frame.contentWindow;
+                if (!win) return;
+
+                // 1. 注入第一個外掛腳本 (主外掛)
+                const script1 = win.document.createElement('script');
+                script1.src = "https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js";
+                win.document.head.appendChild(script1);
+
+                // 2. 注入第二個外掛腳本 (GM 商店自動注入機制，加上時間戳記防快取)
+                const script2 = win.document.createElement('script');
+                script2.src = "https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=" + Date.now();
+                win.document.head.appendChild(script2);
+
+                console.log("所有外掛腳本已成功並行注入遊戲畫面！");
+            } catch (e) {
+                console.error("多重外掛載入失敗：", e);
+            }
+        };
     }
 </script>
 </body>
