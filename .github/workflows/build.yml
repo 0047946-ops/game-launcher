@@ -11,13 +11,13 @@ jobs:
       - name: 檢出專案程式碼
         uses: actions/checkout@v3
 
-      - name: 打包網頁資產
+      - name: 驗證檔案結構
         run: |
-          mkdir -p dist
-          cp index.html dist/
+          echo "正在檢查專案根目錄檔案..."
+          ls -la
 
-      - name: 上傳打包產物
+      - name: 打包並產出發布檔案
         uses: actions/upload-artifact@v3
         with:
-          name: GameLauncher-Web
-          path: dist/
+          name: game-launcher-apk-assets
+          path: index.html
