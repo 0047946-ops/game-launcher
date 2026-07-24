@@ -5,65 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>放置天堂外掛啟動器</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; background: #1a1a1a; color: white; }
-        #menu { padding: 25px; max-width: 500px; margin: 40px auto; background: #2a2a2a; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        .group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; color: #00adb5; font-weight: bold; font-size: 14px; }
-        select, input { width: 100%; padding: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #444; background: #333; color: white; font-size: 14px; }
-        button { width: 100%; padding: 14px; background: #28a745; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        #game-container { width: 100%; height: 100%; display: none; }
-        iframe { width: 100%; height: 100%; border: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; background: #1a1a1a; color: white; display: flex; justify-content: center; align-items: center; }
+        #menu { padding: 30px; width: 90%; max-width: 450px; background: #2a2a2a; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); text-align: center; }
+        .group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 8px; color: #00adb5; font-weight: bold; font-size: 14px; }
+        select { width: 100%; padding: 14px; box-sizing: border-box; border-radius: 6px; border: 1px solid #444; background: #333; color: white; font-size: 14px; }
+        button { width: 100%; padding: 16px; background: #28a745; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        p { color: #aaa; font-size: 12px; line-height: 1.5; }
     </style>
 </head>
 <body>
 
-    <!-- 啟動選單 -->
     <div id="menu">
-        <h2 style="text-align:center; margin-top:0;">🎮 放置天堂外掛啟動器</h2>
-        <p style="text-align:center; color:#aaa; font-size:12px;">行動端專屬直連版本</p>
+        <h2 style="margin-top:0;">🎮 放置天堂外掛導航器</h2>
+        <p>由於瀏覽器嚴格限制跨域注入，建議安裝手機端支援 Userscript（如 Tampermonkey）的瀏覽器（如 Kiwi Browser），並直接造訪下方伺服器即可完美自動載入外掛！</p>
         
         <div class="group">
-            <label>選擇遊戲伺服器：</label>
+            <label>選擇要前往的遊戲伺服器：</label>
             <select id="server-select">
                 <option value="https://shines871.github.io/idle-lineage-class/">伺服器二 (shines871)</option>
                 <option value="https://pp771007.github.io/idle-lineage-class/">伺服器一 (pp771007)</option>
             </select>
         </div>
 
-        <button onclick="launchGame()">🚀 立即啟動遊戲與外掛</button>
-    </div>
-
-    <!-- 遊戲載入畫面 -->
-    <div id="game-container">
-        <iframe id="game-frame"></iframe>
+        <button onclick="openGame()">🚀 直接跳轉至遊戲並啟用外掛</button>
     </div>
 
 <script>
-    function launchGame() {
+    function openGame() {
         const gameUrl = document.getElementById('server-select').value;
-
-        document.getElementById('menu').style.display = 'none';
-        const container = document.getElementById('game-container');
-        container.style.display = 'block';
-
-        const frame = document.getElementById('game-frame');
-        frame.src = gameUrl;
-
-        // 當遊戲頁面載入完成後，直接透過標準 script 標籤植入外掛
-        frame.onload = function() {
-            try {
-                const win = frame.contentWindow;
-                if (!win) return;
-
-                const scriptEl = win.document.createElement('script');
-                // 直接指向外掛的 jsDelivr 或是 Raw 穩定通道
-                scriptEl.src = "https://raw.githubusercontent.com/qcc781192000/idle-lineage-plugin/main/main.user.js";
-                win.document.head.appendChild(scriptEl);
-                console.log("外掛腳本已成功強制注入！");
-            } catch (e) {
-                console.error("外掛注入遭遇瀏覽器權限限制：", e);
-            }
-        };
+        // 直接將頁面跳轉至遊戲伺服器
+        window.location.href = gameUrl;
     }
 </script>
 </body>
