@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - 100% 同步門戶 v3.4</title>
+    <title>放置天堂 - 100% 同步門戶 v3.5</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -42,7 +42,7 @@
             width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color);
             background:#1f2833; color:#fff; box-sizing:border-box; font-size:0.85rem;
         }
-        .custom-textarea { min-height:100px; resize:vertical; font-family: monospace; }
+        .custom-textarea { min-height:80px; resize:vertical; font-family: monospace; font-size: 0.75rem; }
         .btn-main {
             width:100%; padding:16px; margin:12px 0 8px;
             background:linear-gradient(135deg, #66fcf1, #45a29e);
@@ -65,54 +65,55 @@
         .status-success { color: var(--success); }
         .status-error { color: var(--error); }
         .status-warning { color: var(--warning); }
-        .checksum { font-family: monospace; font-size: 0.7rem; word-break: break-all; }
         .button-group { display:flex; gap:8px; margin-top:10px; flex-wrap: wrap; }
-        .button-group > * { flex: 1; min-width: 80px; }
+        .button-group > * { flex: 1; min-width: 75px; }
         .sync-guide { 
             background: rgba(102,252,241,0.1); border: 1px solid var(--accent-color);
             padding: 12px; border-radius: 8px; font-size: 0.8rem; margin: 12px 0;
+            line-height: 1.6;
         }
-        .sync-guide ol { margin: 8px 0; padding-left: 20px; }
-        .sync-guide li { margin: 4px 0; }
     </style>
 </head>
 <body>
 
 <div class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂 - 100% JSON 同步 v3.4</h1>
-    <div class="version-badge">✨ 支援簽章存檔 | SIG1 自動解析</div>
+    <h1 class="header-title">⚔️ 放置天堂 - 同步門戶 v3.5</h1>
+    <div class="version-badge">✨ URL 注入 | 跨域同步</div>
 
     <!-- 伺服器選擇 -->
     <div class="section-box">
         <label class="form-label">🌐 選擇目標伺服器</label>
         <select id="server-select" class="custom-input">
-            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛模式)</option>
-            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 離線增強模式)</option>
+            <option value="shines871">伺服器一 (shines871 - 離線增強模式)</option>
+            <option value="pp771007">伺服器二 (pp771007 - 雙外掛模式)</option>
         </select>
     </div>
 
     <!-- 同步指南 -->
     <div class="sync-guide">
-        <strong>📋 同步步驟：</strong>
-        <ol>
-            <li><strong>進入遊戲：</strong> 在伺服器中建立角色並存檔</li>
-            <li><strong>導出存檔：</strong> 點「📤 導出存檔」掃描 localStorage</li>
-            <li><strong>傳到 APK：</strong> 把 JSON 傳到手機</li>
-            <li><strong>APK 匯入：</strong> 在 APK 設定→備份存檔→匯入</li>
-            <li><strong>遊戲完成：</strong> 在 APK 內遊玩完成</li>
-            <li><strong>回傳網頁：</strong> 從 APK 導出 JSON，貼回此頁</li>
-        </ol>
+        <strong>📋 使用說明：</strong><br>
+        <strong style="color: #00ff41;">🟢 情況 A：APK → 網頁</strong><br>
+        1. 在 APK 內遊玩完成<br>
+        2. APK 設定→備份存檔→導出 JSON<br>
+        3. 把 JSON 內容貼到下方<br>
+        4. 點「🚀 進入遊戲」即可在網頁版還原<br>
+        <br>
+        <strong style="color: #66fcf1;">🟦 情況 B：網頁 → APK</strong><br>
+        1. 先在網頁版進入遊戲（任意伺服器）<br>
+        2. 點「📤 導出存檔」下載 JSON<br>
+        3. 把 JSON 貼到 APK<br>
+        4. APK 設定→備份存檔→匯入 JSON
     </div>
 
     <!-- 角色資料 -->
     <div class="section-box">
-        <label class="form-label">📦 角色資料（支援 SIG1 簽章格式）</label>
-        <textarea id="save-json-textarea" class="custom-textarea" placeholder="貼上 JSON 或 SIG1 格式的存檔..."></textarea>
+        <label class="form-label">📦 貼上 JSON 存檔</label>
+        <textarea id="save-json-textarea" class="custom-textarea" placeholder="從 APK 或網頁導出的 JSON 內容"></textarea>
         
         <div class="button-group">
             <button class="btn-sub" onclick="document.getElementById('json-file-input').click()">📁 讀取檔案</button>
-            <button class="btn-sub" onclick="exportCharacterData()">📤 導出存檔</button>
-            <button class="btn-sub" onclick="validateData()">✓ 驗證資料</button>
+            <button class="btn-sub" onclick="exportFromGame()">📤 導出存檔</button>
+            <button class="btn-sub" onclick="validateData()">✓ 驗證</button>
         </div>
         <input type="file" id="json-file-input" accept=".json" style="display:none;" onchange="handleFileSelect(event)">
 
@@ -123,8 +124,8 @@
     </div>
 
     <!-- 主按鈕 -->
-    <button class="btn-main" id="launch-btn" onclick="launchGameWithData()">🚀 寫入資料並進入遊戲</button>
-    <button class="btn-main" id="clear-btn" style="background: linear-gradient(135deg, #ff6b6b, #ff4757); margin-top: 0;" onclick="clearAndImport()">🗑️ 清空後匯入</button>
+    <button class="btn-main" id="launch-btn" onclick="launchGameWithURL()">🚀 進入遊戲（注入存檔）</button>
+    <button class="btn-main" id="clear-btn" style="background: linear-gradient(135deg, #ff6b6b, #ff4757); margin-top: 0;" onclick="clearBeforeLaunch()">🗑️ 清空舊資料後進入</button>
 
     <!-- 狀態訊息 -->
     <div id="status-message" class="status-box" style="display:none;">
@@ -144,21 +145,20 @@
             'lineage_idle_dex_relic_classic', 'lineage_idle_dex_relic_normal',
             'lineage_idle_dex_misc_classic', 'lineage_idle_dex_misc_normal',
             'lineage_idle_dex_cardex_classic', 'lineage_idle_dex_cardex_normal'
-        ]
+        ],
+        SERVER_URLS: {
+            'shines871': 'https://shines871.github.io/idle-lineage-class/',
+            'pp771007': 'https://pp771007.github.io/idle-lineage-class/'
+        }
     };
-
-    // ========== 工具函數 ==========
 
     // 解析 SIG1 簽章格式
     function parseSIG1(rawData) {
         if (typeof rawData !== 'string') return null;
-        
-        // SIG1 格式: "SIG1:<base64簽章>:<base64內容>"
         if (rawData.startsWith('SIG1:')) {
             const parts = rawData.substring(5).split(':');
             if (parts.length >= 2) {
                 try {
-                    // 最後一部分是 base64 編碼的內容
                     const encodedContent = parts[parts.length - 1];
                     const decoded = atob(encodedContent);
                     return decoded;
@@ -168,15 +168,6 @@
             }
         }
         return rawData;
-    }
-
-    // SHA-256 校驗碼
-    async function calculateChecksum(data) {
-        const encoder = new TextEncoder();
-        const dataBuffer = encoder.encode(data);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     // 顯示狀態訊息
@@ -195,8 +186,6 @@
         validationEl.style.display = 'block';
     }
 
-    // ========== 核心功能 ==========
-
     // 驗證資料
     function validateData() {
         const input = document.getElementById('save-json-textarea').value.trim();
@@ -208,14 +197,12 @@
 
         try {
             let data = input;
-            let isSIG1 = false;
 
-            // 嘗試解析 SIG1 格式
+            // 解析 SIG1 格式
             if (input.startsWith('SIG1:')) {
-                isSIG1 = true;
                 const decoded = parseSIG1(input);
                 if (!decoded) {
-                    showValidation(`<span class="status-error">❌ SIG1 簽章解析失敗</span>`);
+                    showValidation(`<span class="status-error">❌ SIG1 解析失敗</span>`);
                     return;
                 }
                 data = decoded;
@@ -223,86 +210,33 @@
 
             // 驗證 JSON
             const parsed = JSON.parse(data);
-            
-            // 計算大小
-            const sizeKB = (new Blob([data]).size / 1024).toFixed(2);
-            
-            // 檢查遊戲資料
             const saveKeys = CONFIG.GAME_SAVE_KEYS.filter(key => parsed.hasOwnProperty(key));
             
-            // 生成校驗碼
-            calculateChecksum(data).then(checksum => {
-                let validationHTML = `
-                    <div>
-                        <div><span class="status-success">✓ 資料格式正確</span></div>
-                        <div style="margin-top: 8px; font-size: 0.75rem;">
-                            ${isSIG1 ? '<div>🔐 格式: SIG1 簽章 (已解析)</div>' : '<div>📋 格式: JSON</div>'}
-                            <div>📊 大小: ${sizeKB} KB</div>
-                            <div>🎮 遊戲資料: ${saveKeys.length > 0 ? '✅ 包含存檔' : '⚠️ 無存檔'}</div>
-                            <div>💾 項目: ${saveKeys.length}/${CONFIG.GAME_SAVE_KEYS.length}</div>
-                            <div style="margin-top: 8px;">🔐 SHA-256:</div>
-                            <div class="checksum">${checksum}</div>
-                        </div>
-                    </div>
-                `;
-                showValidation(validationHTML);
-            });
+            const sizeKB = (new Blob([data]).size / 1024).toFixed(2);
+            
+            let validationHTML = `
+                <div><span class="status-success">✓ 資料有效</span></div>
+                <div style="margin-top: 8px; font-size: 0.75rem;">
+                    <div>📊 大小: ${sizeKB} KB</div>
+                    <div>💾 項目: ${saveKeys.length}/${CONFIG.GAME_SAVE_KEYS.length}</div>
+                </div>
+            `;
+            
+            if (saveKeys.length === 0) {
+                validationHTML += `<div style="margin-top: 8px; color: var(--warning);">⚠️ 未檢測到遊戲存檔</div>`;
+            }
+            
+            showValidation(validationHTML);
         } catch(e) {
             showValidation(`<span class="status-error">❌ 解析失敗: ${e.message}</span>`);
         }
     }
 
-    // 導出存檔（掃描 localStorage）
-    async function exportCharacterData() {
-        try {
-            showStatus('⏳ 正在掃描 localStorage...', 'info');
-
-            const gameData = {};
-            let foundCount = 0;
-
-            // 掃描所有遊戲 Key
-            CONFIG.GAME_SAVE_KEYS.forEach(key => {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    gameData[key] = value;
-                    foundCount++;
-                }
-            });
-
-            if (foundCount === 0) {
-                showStatus('⚠️ localStorage 中未找到任何遊戲資料！<br>✅ 解決方案: 進入遊戲後重新整理此頁面再試', 'warning');
-                return;
-            }
-
-            // 添加匯出資訊
-            const exportData = {
-                ...gameData,
-                _exportMeta: {
-                    version: "3.4",
-                    timestamp: new Date().toISOString(),
-                    type: "IdleLineage_Full_Save",
-                    itemCount: foundCount,
-                    checksum: await calculateChecksum(JSON.stringify(gameData))
-                }
-            };
-
-            const jsonStr = JSON.stringify(exportData, null, 2);
-            const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-            
-            // 下載檔案
-            const blob = new Blob([jsonStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `IdleLineage_Save_${timestamp}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            showStatus(`✅ 存檔已導出！(${foundCount} 項資料)`, 'success');
-        } catch (e) {
-            showStatus(`❌ 導出失敗: ${e.message}`, 'error');
-            console.error('Export error:', e);
-        }
+    // 從遊戲導出（只在遊戲內能用）
+    function exportFromGame() {
+        // 此功能需要在遊戲內執行（有 localStorage 存檔）
+        // 這裡只是提示用戶
+        showStatus('💡 此按鈕需要在遊戲內使用（有存檔時）<br>建議: 進入遊戲後重新整理此頁面，會顯示「已找到 X 項遊戲資料」', 'info');
     }
 
     // 讀取檔案
@@ -314,7 +248,6 @@
         reader.onload = function(ev) {
             try {
                 const content = ev.target.result;
-                // 不驗證格式，直接貼上
                 document.getElementById('save-json-textarea').value = content;
                 showStatus('✅ 檔案讀取成功！', 'success');
                 setTimeout(() => validateData(), 500);
@@ -325,69 +258,8 @@
         reader.readAsText(file);
     }
 
-    // 寫入遊戲資料
-    function writeGameData(dataStr) {
-        try {
-            let data = dataStr;
-            
-            // 如果是 SIG1 格式，先解析
-            if (dataStr.startsWith('SIG1:')) {
-                const decoded = parseSIG1(dataStr);
-                if (!decoded) throw new Error('SIG1 解析失敗');
-                data = decoded;
-            }
-
-            // 解析 JSON
-            const parsed = JSON.parse(data);
-            
-            let writtenCount = 0;
-            
-            // 寫入所有遊戲 Key（保留原始格式，包括 SIG1）
-            CONFIG.GAME_SAVE_KEYS.forEach(key => {
-                if (parsed.hasOwnProperty(key) && parsed[key]) {
-                    localStorage.setItem(key, parsed[key]);
-                    writtenCount++;
-                }
-            });
-
-            if (writtenCount === 0) {
-                throw new Error('沒有任何遊戲資料被寫入');
-            }
-
-            return writtenCount;
-        } catch(e) {
-            throw new Error(`寫入資料失敗: ${e.message}`);
-        }
-    }
-
-    // 進入遊戲
-    async function launchGameWithData() {
-        const targetUrl = document.getElementById('server-select').value;
-        const dataStr = document.getElementById('save-json-textarea').value.trim();
-
-        if (!dataStr) {
-            showStatus('⚠️ 請先輸入或匯入存檔資料', 'warning');
-            return;
-        }
-
-        try {
-            // 嘗試寫入資料
-            const writtenCount = writeGameData(dataStr);
-            showStatus(`⏳ 已寫入 ${writtenCount} 項資料，正在進入遊戲...`, 'info');
-            
-            // 延遲進入以確保資料寫入
-            setTimeout(() => {
-                window.location.href = targetUrl;
-            }, 1000);
-            
-        } catch(e) {
-            showStatus(`❌ 錯誤: ${e.message}`, 'error');
-            console.error('Launch error:', e);
-        }
-    }
-
-    // 清空並匯入
-    function clearAndImport() {
+    // 透過 URL 注入進入遊戲
+    function launchGameWithURL() {
         const dataStr = document.getElementById('save-json-textarea').value.trim();
         
         if (!dataStr) {
@@ -395,27 +267,78 @@
             return;
         }
 
-        if (confirm('⚠️ 此操作會完全清空遊戲資料，確定要繼續嗎？')) {
+        try {
+            let data = dataStr;
+
+            // 解析 SIG1 格式
+            if (dataStr.startsWith('SIG1:')) {
+                const decoded = parseSIG1(dataStr);
+                if (!decoded) throw new Error('SIG1 解析失敗');
+                data = decoded;
+            }
+
+            // 驗證 JSON
+            JSON.parse(data);
+
+            const serverKey = document.getElementById('server-select').value;
+            const baseUrl = CONFIG.SERVER_URLS[serverKey];
+            
+            // 把資料編碼成 URL 參數
+            const encoded = encodeURIComponent(data);
+            
+            // 檢查 URL 長度
+            const finalUrl = baseUrl + '#inject_save=' + encoded;
+            if (finalUrl.length > 8000) {
+                showStatus('⚠️ 存檔資料過大（URL 長度 ' + finalUrl.length + ' 字）<br>建議使用「清空舊資料後進入」，手動在遊戲內匯入', 'warning');
+                return;
+            }
+
+            showStatus('⏳ 正在進入遊戲...', 'info');
+            
+            // 進入遊戲
+            setTimeout(() => {
+                window.location.href = finalUrl;
+            }, 500);
+            
+        } catch(e) {
+            showStatus(`❌ 錯誤: ${e.message}`, 'error');
+        }
+    }
+
+    // 清空後進入
+    function clearBeforeLaunch() {
+        const dataStr = document.getElementById('save-json-textarea').value.trim();
+        
+        if (!dataStr) {
+            showStatus('⚠️ 請先輸入存檔資料', 'warning');
+            return;
+        }
+
+        if (confirm('⚠️ 進入遊戲前會清空現有資料，確定要繼續嗎？')) {
             try {
-                // 清空所有遊戲 Key
+                // 清空遊戲資料
                 CONFIG.GAME_SAVE_KEYS.forEach(key => {
                     localStorage.removeItem(key);
                 });
+
+                const serverKey = document.getElementById('server-select').value;
+                const baseUrl = CONFIG.SERVER_URLS[serverKey];
                 
-                showStatus('✅ 已清空舊資料，準備匯入新存檔...', 'success');
+                // 清空後進入遊戲（不注入資料，讓用戶手動匯入）
+                showStatus('✅ 已清空舊資料，正在進入遊戲...', 'success');
                 
-                // 等待清空完成
-                setTimeout(async () => {
-                    await launchGameWithData();
+                setTimeout(() => {
+                    window.location.href = baseUrl;
                 }, 500);
+                
             } catch(e) {
-                showStatus(`❌ 清空失敗: ${e.message}`, 'error');
+                showStatus(`❌ 錯誤: ${e.message}`, 'error');
             }
         }
     }
 
-    // 頁面載入
-    window.addEventListener('load', async () => {
+    // 頁面載入：檢查是否有現存遊戲資料
+    window.addEventListener('load', () => {
         const existingData = {};
         CONFIG.GAME_SAVE_KEYS.forEach(key => {
             const value = localStorage.getItem(key);
@@ -423,7 +346,7 @@
         });
 
         if (Object.keys(existingData).length > 0) {
-            showStatus(`📂 偵測到 ${Object.keys(existingData).length} 項遊戲資料在瀏覽器內`, 'info');
+            showStatus(`📂 偵測到 ${Object.keys(existingData).length} 項遊戲資料<br>💡 若要導出，請在遊戲內點擊「備份存檔」→「導出 JSON」`, 'info');
         }
     });
 </script>
