@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - 100% 同步門戶 v3.1</title>
+    <title>放置天堂 - 100% 同步門戶 v3.2</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -79,8 +79,8 @@
 <body>
 
 <div class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂 - 100% JSON 同步 v3.1</h1>
-    <div class="version-badge">✨ 修復人物資料同步 | APK ↔ 網頁完全兼容</div>
+    <h1 class="header-title">⚔️ 放置天堂 - 100% JSON 同步 v3.2</h1>
+    <div class="version-badge">✨ 完全支援 LZ 壓縮存檔 | 100% 相容放置天堂</div>
 
     <!-- 伺服器選擇 -->
     <div class="section-box">
@@ -148,7 +148,8 @@
             'lineage_idle_pets_traditional', 'lineage_idle_pets_traditional_normal',
             'lineage_idle_dex_equipt_classic', 'lineage_idle_dex_equipt_normal',
             'lineage_idle_dex_relic_classic', 'lineage_idle_dex_relic_normal',
-            'lineage_idle_dex_misc_classic', 'lineage_idle_dex_misc_normal'
+            'lineage_idle_dex_misc_classic', 'lineage_idle_dex_misc_normal',
+            'lineage_idle_dex_cardex_classic', 'lineage_idle_dex_cardex_normal'
         ]
     };
 
@@ -242,7 +243,29 @@
         validationEl.style.display = 'block';
     }
 
-    // ========== 核心功能 ==========
+    // ========== 核心功能：直接使用遊戲的 LZ 解壓 API ==========
+
+    // 讀取並解壓存檔（在進入遊戲後才能呼叫）
+    function getDecompressedSave(slotNo) {
+        try {
+            // 檢查遊戲是否已載入必要函式
+            if (typeof window._lzGet !== 'function' || typeof window._saveUnwrap !== 'function') {
+                return null;
+            }
+
+            // 解壓 → 解簽 → 取出明文 JSON
+            const compressed = window._lzGet('lineage_idle_save_' + slotNo);
+            if (!compressed) return null;
+
+            const unwrapped = window._saveUnwrap(compressed);
+            if (!unwrapped || !unwrapped.ok || !unwrapped.payload) return null;
+
+            return unwrapped.payload; // 返回明文 JSON 字串
+        } catch (e) {
+            console.error('解壓存檔失敗:', e);
+            return null;
+        }
+    }
 
     // 驗證 JSON
     function validateJSON() {
@@ -263,6 +286,20 @@
             const hasSaveData = CONFIG.GAME_SAVE_KEYS.some(key => data.hasOwnProperty(key));
             const characterCount = CONFIG.GAME_SAVE_KEYS.filter(key => data[key] !== undefined).length;
             
+            // 檢查是否有人物結構 (p.p.name)
+            let hasPlayer = false;
+            try {
+                for (let key of ['lineage_idle_save_1', 'lineage_idle_save_2', 'lineage_idle_save_3', 'lineage_idle_save_4']) {
+                    if (data[key]) {
+                        const saveData = JSON.parse(data[key]);
+                        if (saveData && saveData.p && saveData.p.name) {
+                            hasPlayer = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {}
+            
             // 生成校驗碼
             calculateChecksum(jsonText).then(checksum => {
                 let validationHTML = `
@@ -270,16 +307,17 @@
                         <div><span class="status-success">✓ JSON 格式正確</span></div>
                         <div style="margin-top: 8px; font-size: 0.75rem;">
                             <div>📊 檔案大小: ${sizeKB} KB</div>
-                            <div>🎮 遊戲資料: ${hasSaveData ? '✅ 包含人物資料' : '⚠️ 未檢測到人物資料'}</div>
-                            <div>💾 存檔數量: ${characterCount} 個</div>
+                            <div>🎮 遊戲資料: ${hasSaveData ? '✅ 包含存檔資料' : '⚠️ 未檢測到存檔資料'}</div>
+                            <div>👤 人物資料: ${hasPlayer ? '✅ 包含角色' : '⚠️ 未檢測到角色'}</div>
+                            <div>💾 資料項目: ${characterCount} 個</div>
                             <div style="margin-top: 8px;">🔐 SHA-256:</div>
                             <div class="checksum">${checksum}</div>
                         </div>
                     </div>
                 `;
                 
-                if (!hasSaveData) {
-                    validationHTML += `<div style="margin-top: 8px; color: var(--warning);">⚠️ 警告：此 JSON 未包含遊戲人物資料，匯入後可能無法還原角色。</div>`;
+                if (!hasSaveData || !hasPlayer) {
+                    validationHTML += `<div style="margin-top: 8px; color: var(--warning);">⚠️ 警告：此 JSON 可能不完整，匯入後可能無法還原角色。</div>`;
                 }
                 
                 showValidation(validationHTML);
@@ -289,20 +327,38 @@
         }
     }
 
-    // 導出存檔（直接抓遊戲的真實存檔 Key）
+    // 導出存檔（必須在遊戲內執行）
     async function exportCharacterData() {
+        showStatus('⏳ 正在掃描遊戲存檔...', 'info');
+
+        // 嘗試直接抓遊戲內的存檔（需要遊戲 API）
         try {
+            if (typeof window._lzGet !== 'function') {
+                showStatus('⚠️ 請先進入遊戲，讓我們可以存取你的存檔資料。', 'warning');
+                return;
+            }
+
             const gameData = {};
-            
-            // ✅ 直接從 localStorage 抓放置天堂的實際存檔 Key
-            CONFIG.GAME_SAVE_KEYS.forEach(key => {
+            let foundCount = 0;
+
+            // 逐個掃描 4 個存檔位
+            for (let slot = 1; slot <= 4; slot++) {
+                const saveData = getDecompressedSave(slot);
+                if (saveData) {
+                    gameData[`lineage_idle_save_${slot}`] = saveData;
+                    foundCount++;
+                }
+            }
+
+            // 掃描共用資料（倉庫、寵物、收集冊）
+            CONFIG.GAME_SAVE_KEYS.slice(4).forEach(key => {
                 const value = localStorage.getItem(key);
                 if (value) {
                     gameData[key] = value;
                 }
             });
 
-            if (Object.keys(gameData).length === 0) {
+            if (foundCount === 0 && Object.keys(gameData).length === 0) {
                 showStatus('⚠️ 未找到任何人物資料！請確認已進入遊戲並建立角色。', 'warning');
                 return;
             }
@@ -311,7 +367,7 @@
             const exportData = {
                 ...gameData,
                 _exportMeta: {
-                    version: "3.1",
+                    version: "3.2",
                     timestamp: new Date().toISOString(),
                     type: "IdleLineage_Full_Save",
                     dataCount: Object.keys(gameData).length,
@@ -334,7 +390,7 @@
             // 同時保存到 IndexedDB 備份
             await saveToIndexedDB(jsonStr);
             
-            showStatus(`✅ 存檔已導出！(${Object.keys(gameData).length} 個資料)`, 'success');
+            showStatus(`✅ 存檔已導出！(${Object.keys(gameData).length} 項資料)`, 'success');
         } catch (e) {
             showStatus(`❌ 導出失敗: ${e.message}`, 'error');
         }
@@ -360,12 +416,12 @@
         reader.readAsText(file);
     }
 
-    // 寫入遊戲資料（直接寫入遊戲的實際存檔 Key）
+    // 寫入遊戲資料
     async function writeGameData(jsonData) {
         try {
             const data = JSON.parse(jsonData);
             
-            // ✅ 直接寫入遊戲的實際存檔 Key
+            // 直接寫入遊戲的實際存檔 Key（未壓縮版本，遊戲內會自動處理）
             CONFIG.GAME_SAVE_KEYS.forEach(key => {
                 if (data.hasOwnProperty(key)) {
                     localStorage.setItem(key, data[key]);
@@ -397,10 +453,10 @@
         try {
             const data = JSON.parse(jsonText);
             
-            // 驗證是否包含人物資料
+            // 驗證是否包含遊戲資料
             const hasSaveData = CONFIG.GAME_SAVE_KEYS.some(key => data.hasOwnProperty(key));
             if (!hasSaveData) {
-                showStatus('❌ 此 JSON 不包含遊戲人物資料，無法進入遊戲！', 'error');
+                showStatus('❌ 此 JSON 不包含遊戲資料，無法進入遊戲！', 'error');
                 return;
             }
             
