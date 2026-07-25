@@ -7,8 +7,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -33,13 +35,14 @@ public class MainActivity extends Activity {
     private static final String PREF_NAME = "IdleLineageSaveData";
     private static final String KEY_SAVE_JSON = "player_save_json";
     
-    // 支援雙外掛腳本 KEY
     private static final String KEY_PLUGIN_URL_1 = "custom_plugin_url_1";
     private static final String KEY_PLUGIN_URL_2 = "custom_plugin_url_2";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        checkAllFilesAccessPermission();
 
         webView = new WebView(this);
         setContentView(webView);
@@ -60,7 +63,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 下載監聽器
+        // 🔥 1. 原生下載監聽器（處理一般 URL 與 Blob URL）
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -92,14 +95,13 @@ public class MainActivity extends Activity {
 
                     DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                     dm.enqueue(request);
-                    Toast.makeText(this, "已開始下載：" + fileName, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "📥 已開始匯出存檔：" + fileName, Toast.LENGTH_SHORT).show();
                 }
             } catch (Exception e) {
-                Toast.makeText(this, "下載失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
 
-        // 綁定原生橋樑
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -127,11 +129,10 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 
-                // 進入兩大遊戲網址時自動載入腳本與同步人物資料
                 if (url != null && url.startsWith("http")) {
                     SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
                     
-                    // 1. 預設雙外掛腳本
+                    // 載入預設腳本
                     String js1 = "if(!window.__main_plugin_loaded){window.__main_plugin_loaded=true;" +
                             "var s1=document.createElement('script');" +
                             "s1.src='https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';" +
@@ -145,7 +146,7 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 注入自訂外掛腳本 1
+                    // 載入自訂腳本
                     String plugin1 = sp.getString(KEY_PLUGIN_URL_1, "");
                     if (!plugin1.isEmpty()) {
                         String jsCustom1 = "if(!window.__custom_plugin_1_loaded){window.__custom_plugin_1_loaded=true;" +
@@ -154,7 +155,6 @@ public class MainActivity extends Activity {
                         view.evaluateJavascript(jsCustom1, null);
                     }
 
-                    // 3. 注入自訂外掛腳本 2
                     String plugin2 = sp.getString(KEY_PLUGIN_URL_2, "");
                     if (!plugin2.isEmpty()) {
                         String jsCustom2 = "if(!window.__custom_plugin_2_loaded){window.__custom_plugin_2_loaded=true;" +
@@ -163,31 +163,55 @@ public class MainActivity extends Activity {
                         view.evaluateJavascript(jsCustom2, null);
                     }
 
-                    // 4. 🔥 實現 APK 人物資料同步：將原生 JSON 自動寫入網頁 localStorage
+                    // 自動同步進度至遊戲 DOM 空間
                     String localJson = sp.getString(KEY_SAVE_JSON, "");
                     if (!localJson.isEmpty()) {
-                        String syncJs = "try { " +
-                                "localStorage.setItem('RAW_INJECT_SAVE_DATA', '" + localJson.replace("'", "\\'") + "');" +
-                                "} catch(e){}";
+                        String safeJson = localJson.replace("'", "\\'").replace("\n", "").replace("\r", "");
+                        String syncJs = "(function(){" +
+                                "try {" +
+                                "  localStorage.setItem('RAW_INJECT_SAVE_DATA', '" + safeJson + "');" +
+                                "  localStorage.setItem('fable5_save', '" + safeJson + "');" +
+                                "  localStorage.setItem('save_data', '" + safeJson + "');" +
+                                "} catch(e){}" +
+                                "})()";
                         view.evaluateJavascript(syncJs, null);
                     }
 
-                    // 5. 下載攔截機制
+                    // 背景自動備份存檔
+                    String autoSyncBackJs = "(function(){" +
+                            "if(window.__sync_listener_active) return;" +
+                            "window.__sync_listener_active = true;" +
+                            "setInterval(function(){" +
+                            "  try {" +
+                            "    var data = localStorage.getItem('fable5_save') || localStorage.getItem('RAW_INJECT_SAVE_DATA') || localStorage.getItem('save_data');" +
+                            "    if(data && data.length > 20){" +
+                            "      AndroidBridge.saveGameDataSilent(data);" +
+                            "    }" +
+                            "  }catch(e){}" +
+                            "}, 5000);" +
+                            "})()";
+                    view.evaluateJavascript(autoSyncBackJs, null);
+
+                    // 🔥 2. 全域 Hook 攔截：強制將網頁中的匯出/下載動作轉導至 Android 原生檔案寫入
                     String hookDownload =
                         "(function(){" +
+                        "if(window.__export_hook_active) return;" +
+                        "window.__export_hook_active = true;" +
                         "document.addEventListener('click', function(e){" +
-                        "  var a = e.target.closest && e.target.closest('a[download]');" +
-                        "  if(a && a.href && a.href.indexOf('blob:') === 0){" +
-                        "    e.preventDefault();" +
-                        "    fetch(a.href).then(r=>r.blob()).then(function(blob){" +
-                        "      var reader = new FileReader();" +
-                        "      reader.onloadend = function(){" +
-                        "        var base64 = reader.result.split(',')[1];" +
-                        "        var name = a.download || 'fable5_save.json';" +
-                        "        AndroidBridge.saveBase64File(base64, name);" +
-                        "      };" +
-                        "      reader.readAsDataURL(blob);" +
-                        "    });" +
+                        "  var a = e.target.closest && e.target.closest('a');" +
+                        "  if(a && a.href){" +
+                        "    if(a.href.indexOf('blob:') === 0 || a.hasAttribute('download')){" +
+                        "      e.preventDefault();" +
+                        "      fetch(a.href).then(r=>r.blob()).then(function(blob){" +
+                        "        var reader = new FileReader();" +
+                        "        reader.onloadend = function(){" +
+                        "          var base64 = reader.result.split(',')[1];" +
+                        "          var name = a.download || 'fable5_save.json';" +
+                        "          AndroidBridge.saveBase64File(base64, name);" +
+                        "        };" +
+                        "        reader.readAsDataURL(blob);" +
+                        "      });" +
+                        "    }" +
                         "  }" +
                         "}, true);" +
                         "})()";
@@ -198,6 +222,21 @@ public class MainActivity extends Activity {
 
         handleExternalFileIntent(getIntent());
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    private void checkAllFilesAccessPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    startActivity(intent);
+                }
+            }
+        }
     }
 
     private void handleExternalFileIntent(Intent intent) {
@@ -241,6 +280,7 @@ public class MainActivity extends Activity {
 
     public class AndroidBridge {
 
+        // 🔥 3. 原生匯出寫入：寫入手機 Download 資料夾並跳出成功提示
         @JavascriptInterface
         public void saveBase64File(String base64Data, String fileName) {
             runOnUiThread(() -> {
@@ -253,7 +293,7 @@ public class MainActivity extends Activity {
                     fos.write(bytes);
                     fos.close();
                     Toast.makeText(MainActivity.this,
-                            "✅ 存檔已成功匯出至 Download：" + fileName, Toast.LENGTH_LONG).show();
+                            "✅ 存檔已成功匯出至 Download 資料夾：\n" + fileName, Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this,
                             "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -266,6 +306,12 @@ public class MainActivity extends Activity {
             SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             sp.edit().putString(KEY_SAVE_JSON, jsonText).apply();
             runOnUiThread(() -> Toast.makeText(MainActivity.this, "✅ 角色進度已成功同步至手機原生儲存區！", Toast.LENGTH_SHORT).show());
+        }
+
+        @JavascriptInterface
+        public void saveGameDataSilent(String jsonText) {
+            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            sp.edit().putString(KEY_SAVE_JSON, jsonText).apply();
         }
 
         @JavascriptInterface
@@ -286,7 +332,6 @@ public class MainActivity extends Activity {
             return "";
         }
 
-        // 新增：儲存與讀取雙外掛腳本 API
         @JavascriptInterface
         public void saveCustomPluginUrls(String url1, String url2) {
             SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -314,6 +359,13 @@ public class MainActivity extends Activity {
             filePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
             filePathCallback = null;
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleExternalFileIntent(intent);
     }
 
     @Override
