@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>放置天堂 - 全能自動同步啟動器</title>
+    <title>放置天堂 - 全能雙向 JSON 資料同步門戶</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -16,6 +16,7 @@
             --border-color: #45a29e;
             --danger-color: #ff4d4d;
             --success-color: #2ecc71;
+            --warning-color: #f39c12;
         }
 
         html, body {
@@ -44,7 +45,7 @@
         }
 
         .header-title {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             text-align: center;
             color: var(--accent-color);
             margin: 0 0 20px 0;
@@ -63,7 +64,7 @@
             display: block;
             font-weight: 700;
             margin-bottom: 8px;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             color: var(--accent-color);
         }
 
@@ -75,8 +76,14 @@
             background-color: #1f2833;
             color: #fff;
             box-sizing: border-box;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             outline: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
         }
 
         .btn-main {
@@ -86,14 +93,15 @@
             color: #0b0c10;
             border: none;
             border-radius: 8px;
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 800;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(102, 252, 241, 0.3);
         }
 
         .btn-sub {
-            padding: 8px 12px;
+            flex: 1;
+            padding: 10px;
             background: #1f2833;
             color: var(--accent-color);
             border: 1px solid var(--accent-color);
@@ -101,42 +109,24 @@
             font-weight: bold;
             font-size: 0.8rem;
             cursor: pointer;
-            margin-top: 6px;
+            text-align: center;
         }
 
-        .plugin-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #1f2833;
-            padding: 6px 10px;
-            border-radius: 6px;
-            margin-top: 6px;
-            font-size: 0.8rem;
-            border: 1px solid #333;
-        }
-
-        .plugin-url {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 80%;
-            color: #fff;
-        }
-
-        .btn-del {
-            background: var(--danger-color);
-            color: #fff;
+        .btn-success {
+            background: var(--success-color);
+            color: #000;
             border: none;
-            border-radius: 4px;
-            padding: 3px 8px;
-            cursor: pointer;
-            font-size: 0.75rem;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: #000;
+            border: none;
         }
 
         .system-status {
             margin-top: 16px;
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             color: #888;
             text-align: center;
             line-height: 1.4;
@@ -146,70 +136,142 @@
 <body>
 
 <div id="launcher-ui" class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂全能雲端啟動器</h1>
+    <h1 class="header-title">⚔️ 放置天堂 - 全能 JSON 自動同步門戶</h1>
 
     <!-- 1. 伺服器選擇 -->
     <div class="section-box">
-        <label class="form-label" for="server-select">🌐 選擇運行伺服器節點：</label>
+        <label class="form-label" for="server-select">🌐 選擇目標遊戲節點：</label>
         <select id="server-select" class="custom-select">
             <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛 / 全功能模式)</option>
             <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 離線掛機增強模式)</option>
         </select>
     </div>
 
-    <!-- 2. 存檔快捷注入工具（備用） -->
+    <!-- 2. 標準 JSON 雙向數據導出/導入控制台 -->
     <div class="section-box">
-        <label class="form-label">💾 快速注入存檔至目標伺服器：</label>
-        <textarea id="save-input" class="custom-textarea" rows="2" placeholder="貼上 Chrome 網頁版導出的存檔文字..."></textarea>
-        <button class="btn-sub" style="width: 100%; background: var(--success-color); color:#000; border:none;" onclick="injectSaveToTarget()">📥 一鍵注入存檔並進入遊戲</button>
+        <label class="form-label">📦 角色 JSON 存檔雙向同步管理：</label>
+        
+        <!-- 上傳 JSON 檔案或貼上 JSON 內容 -->
+        <input type="file" id="json-file-input" accept=".json" style="display:none;" onchange="handleFileSelect(event)">
+        <textarea id="save-json-textarea" class="custom-textarea" rows="3" placeholder="請選擇 .json 檔案上傳，或直接貼上 JSON 存檔內容..."></textarea>
+        
+        <div class="btn-group">
+            <button class="btn-sub btn-success" onclick="document.getElementById('json-file-input').click()">📁 讀取 .json 檔</button>
+            <button class="btn-sub btn-warning" onclick="exportAPKDataToJSON()">📤 從 APK 匯出 .json 檔</button>
+        </div>
     </div>
 
-    <!-- 3. 自訂外掛腳本鏈管理 -->
+    <!-- 3. 自訂外掛網址區 -->
     <div class="section-box">
-        <label class="form-label">🧩 玩家自訂外掛腳本鏈：</label>
-        <input type="text" id="plugin-input" class="custom-input" placeholder="貼上自訂腳本網址 (https://...)">
-        <button class="btn-sub" style="width:100%;" onclick="addPlugin()">➕ 掛載自訂腳本網址</button>
+        <label class="form-label">🧩 玩家自訂腳本鏈：</label>
+        <input type="text" id="plugin-input" class="custom-input" placeholder="貼上腳本網址 (https://...)">
+        <button class="btn-sub" style="width:100%; margin-top:8px;" onclick="addPlugin()">➕ 掛載外掛腳本網址</button>
         <div id="plugin-list" style="margin-top: 8px;"></div>
     </div>
 
     <!-- 4. 啟動按鈕 -->
-    <button class="btn-main" onclick="directToTargetGame()">🚀 切換至目標伺服器 (讀取原網頁角色)</button>
+    <button class="btn-main" onclick="launchGameWithJSON()">🚀 寫入 JSON 角色資料並進入遊戲</button>
 
-    <div id="status-display" class="system-status">當前版本 v1.3.0 | 原生同源資料流模式已啟動</div>
+    <div id="status-display" class="system-status">當前版本 v1.3.5 | 原生 JSON 檔案雙向導出架構已部署</div>
 </div>
 
 <script>
-    const SYSTEM_VERSION = "1.3.0";
-    const VERSION_CHECK_URL = "https://0047946-ops.github.io/game-launcher/version.json";
+    const SYSTEM_VERSION = "1.3.5";
     const STORAGE_KEY_PLUGINS = "USER_CUSTOM_PLUGINS";
+    const STORAGE_KEY_SAVE = "GLOBAL_CHARACTER_SAVE_JSON";
 
     document.addEventListener("DOMContentLoaded", () => {
-        executeVersionCheck();
         renderPlugins();
+        // 自動載入上次暫存的 JSON
+        const localSave = localStorage.getItem(STORAGE_KEY_SAVE);
+        if (localSave) {
+            document.getElementById('save-json-textarea').value = localSave;
+        }
     });
 
-    // 1. 版本檢查
-    function executeVersionCheck() {
-        const currentUrl = new URL(window.location.href);
-        if (!currentUrl.searchParams.has('v')) {
-            currentUrl.searchParams.set('v', Date.now().toString());
-            window.location.replace(currentUrl.toString());
-            return;
-        }
+    // 1. 處理讀取實體 .json 檔案
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
 
-        fetch(`${VERSION_CHECK_URL}?t=${Date.now()}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.latestVersion && data.latestVersion !== SYSTEM_VERSION) {
-                    if (confirm(`🎉 發現最新版本啟動器 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即下載新版？`)) {
-                        window.location.href = data.downloadUrl;
-                    }
-                }
-            })
-            .catch(() => {});
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            try {
+                // 驗證是否為合法 JSON
+                JSON.parse(content);
+                document.getElementById('save-json-textarea').value = content;
+                localStorage.setItem(STORAGE_KEY_SAVE, content);
+                alert('✅ 成功讀取 ' + file.name + ' JSON 檔案！');
+            } catch (err) {
+                alert('❌ 檔案格式不符合 JSON 規範，請確認檔案內容！');
+            }
+        };
+        reader.readAsText(file);
     }
 
-    // 2. 玩家自訂外掛管理
+    // 2. 🔥 核心亮點：從 APK/本機直接「匯出真正的 .json 檔案」
+    function exportAPKDataToJSON() {
+        // 抓取本機 localstorage 或是輸入框內的角色資料
+        let dataStr = document.getElementById('save-json-textarea').value.trim();
+
+        if (!dataStr) {
+            // 如果輸入框是空的，嘗試自動打包 localstorage
+            const gameData = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                gameData[key] = localStorage.getItem(key);
+            }
+            dataStr = JSON.stringify(gameData, null, 2);
+        }
+
+        try {
+            // 格式化驗證
+            const jsonObj = JSON.parse(dataStr);
+            const formattedJSON = JSON.stringify(jsonObj, null, 2);
+
+            // 建立 Blob 實體 .json 檔供下載
+            const blob = new Blob([formattedJSON], { type: "application/json;charset=utf-8" });
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            
+            // 建立年月日時分秒檔名
+            const timestamp = new Date().toISOString().slice(0, 10);
+            a.href = downloadUrl;
+            a.download = `IdleLineage_Save_${timestamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+
+            alert('🎉 已成功生成並匯出原生 .json 角色存檔檔案！');
+        } catch (e) {
+            alert('❌ 目前暫無可匯出的有效 JSON 角色資料！');
+        }
+    }
+
+    // 3. 攜帶 JSON 寫入目標遊戲
+    function launchGameWithJSON() {
+        const targetUrl = document.getElementById('server-select').value;
+        const jsonText = document.getElementById('save-json-textarea').value.trim();
+
+        if (jsonText) {
+            try {
+                JSON.parse(jsonText); // 驗證 JSON
+                localStorage.setItem(STORAGE_KEY_SAVE, jsonText);
+                
+                // 將 JSON 進行 Base64/URI 編碼傳遞
+                const encodedData = encodeURIComponent(jsonText);
+                window.location.href = targetUrl + "#inject_json=" + encodedData;
+            } catch(e) {
+                alert('❌ 存檔 JSON 格式損壞，請確認後重新貼上！');
+            }
+        } else {
+            window.location.href = targetUrl;
+        }
+    }
+
+    // 4. 外掛腳本管理
     function getPlugins() {
         try { return JSON.parse(localStorage.getItem(STORAGE_KEY_PLUGINS)) || []; }
         catch(e) { return []; }
@@ -221,17 +283,14 @@
         listContainer.innerHTML = "";
 
         if (plugins.length === 0) {
-            listContainer.innerHTML = `<div style="text-align:center; color:#666; font-size:0.78rem;">無自訂腳本</div>`;
+            listContainer.innerHTML = `<div style="text-align:center; color:#666; font-size:0.75rem;">無自訂腳本</div>`;
             return;
         }
 
         plugins.forEach((url, index) => {
             const item = document.createElement('div');
             item.className = 'plugin-item';
-            item.innerHTML = `
-                <span class="plugin-url" title="${url}">${url}</span>
-                <button class="btn-del" onclick="removePlugin(${index})">刪除</button>
-            `;
+            item.innerHTML = `<span style="color:#fff; font-size:0.8rem;">${url}</span>`;
             listContainer.appendChild(item);
         });
     }
@@ -239,40 +298,12 @@
     function addPlugin() {
         const input = document.getElementById('plugin-input');
         const url = input.value.trim();
-        if (!url || !url.startsWith('http')) return alert('請輸入正確的 HTTP/HTTPS 網址！');
-
+        if (!url || !url.startsWith('http')) return alert('請輸入正確網址！');
         const plugins = getPlugins();
-        if (plugins.includes(url)) return alert('腳本已存在！');
-
         plugins.push(url);
         localStorage.setItem(STORAGE_KEY_PLUGINS, JSON.stringify(plugins));
         input.value = "";
         renderPlugins();
-    }
-
-    function removePlugin(index) {
-        const plugins = getPlugins();
-        plugins.splice(index, 1);
-        localStorage.setItem(STORAGE_KEY_PLUGINS, JSON.stringify(plugins));
-        renderPlugins();
-    }
-
-    // 3. 直接切換至目標伺服器（真正讀取原本 Google 瀏覽器第 4 張圖的角色資料！）
-    function directToTargetGame() {
-        const targetUrl = document.getElementById('server-select').value;
-        // 真正跳轉網址，確保網址列變成 pp771007.github.io
-        window.location.href = targetUrl;
-    }
-
-    // 4. 如果是跨端/跨裝置，可點擊一鍵把文字存檔帶過去寫入
-    function injectSaveToTarget() {
-        const str = document.getElementById('save-input').value.trim();
-        if (!str) return alert('請先貼上存檔文字！');
-        
-        const targetUrl = document.getElementById('server-select').value;
-        // 將存檔放在 URL Hash 帶過去
-        const encodedSave = encodeURIComponent(str);
-        window.location.href = targetUrl + "#inject_save=" + encodedSave;
     }
 </script>
 
