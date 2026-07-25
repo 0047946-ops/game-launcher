@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>存檔診斷工具</title>
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  #toolbar { background:#222; padding:8px; text-align:center; }
+  #toolbar button { padding:10px 16px; font-size:14px; }
+  #output {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 12px;
+    padding: 10px;
+    background: #f5f5f5;
+    display: none;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  iframe { width:100%; height: 80vh; border:none; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button onclick="showStorage()">📋 顯示存檔資訊</button>
+  <button onclick="copyOutput()">📎 複製</button>
+</div>
+<div id="output"></div>
+
+<!-- 把下面這行網址換成你原本遊戲的真實網址 -->
+<iframe id="gameFrame" src="https://pp771007.github.io/idle-lineage-class/"></iframe>
+
+<script>
+function showStorage() {
+  var out = document.getElementById('output');
+  out.style.display = 'block';
+
+  try {
+    var iframeWin = document.getElementById('gameFrame').contentWindow;
+    var keys = Object.keys(iframeWin.localStorage);
+    var result = "=== localStorage 共 " + keys.length + " 個 key ===\n\n";
+
+    keys.forEach(function(k) {
+      var val = iframeWin.localStorage.getItem(k);
+      var preview = val.length > 300 ? val.substring(0, 300) + "...(截斷，共" + val.length + "字)" : val;
+      result += "【" + k + "】\n" + preview + "\n\n";
+    });
+
+    out.textContent = result;
+  } catch (e) {
+    out.textContent = "無法讀取（可能是跨網域限制）：" + e.message +
+      "\n\n這代表 iframe 方式行不通，需要改用其他注入方式，請把這個錯誤訊息回報給我。";
+  }
+}
+
+function copyOutput() {
+  var out = document.getElementById('output');
+  if (!out.textContent) { alert('請先按「顯示存檔資訊」'); return; }
+  navigator.clipboard.writeText(out.textContent).then(function() {
+    alert('已複製，貼給我看');
+  }).catch(function() {
+    alert('複製失敗，請手動長按選取文字複製');
+  });
+}
+</script>
+
+</body>
+</html>
