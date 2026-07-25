@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - 100% 同步門戶 v2.0</title>
+    <title>放置天堂 - 100% 同步門戶 v3.0</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -11,6 +11,9 @@
             --accent-color: #66fcf1;
             --text-color: #c5c6c7;
             --border-color: #45a29e;
+            --success: #00ff41;
+            --error: #ff6b6b;
+            --warning: #ffa500;
         }
         body {
             margin:0; padding:0; background:var(--bg-color); color:var(--text-color);
@@ -18,11 +21,18 @@
             display:flex; justify-content:center; align-items:center; min-height:100vh;
         }
         .launcher-card {
-            width: 92%; max-width: 500px; background: var(--card-bg);
+            width: 92%; max-width: 560px; background: var(--card-bg);
             border: 1px solid var(--border-color); border-radius: 16px;
             padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.9);
         }
-        .header-title { font-size: 1.45rem; text-align:center; color:var(--accent-color); margin:0 0 20px 0; font-weight:900; }
+        .header-title { 
+            font-size: 1.45rem; text-align:center; color:var(--accent-color); 
+            margin:0 0 10px 0; font-weight:900; 
+        }
+        .version-badge {
+            text-align: center; font-size: 0.75rem; color: var(--warning);
+            margin-bottom: 16px; font-weight: bold;
+        }
         .section-box {
             border: 1px dashed var(--border-color); padding:16px; border-radius:12px;
             background:#0b0c10; margin-bottom:18px;
@@ -32,25 +42,47 @@
             width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color);
             background:#1f2833; color:#fff; box-sizing:border-box; font-size:0.85rem;
         }
-        .custom-textarea { min-height:120px; resize:vertical; }
+        .custom-textarea { min-height:100px; resize:vertical; }
         .btn-main {
             width:100%; padding:16px; margin:12px 0 8px;
             background:linear-gradient(135deg, #66fcf1, #45a29e);
             color:#0b0c10; border:none; border-radius:10px; font-size:1.1rem; font-weight:900;
-            cursor:pointer;
+            cursor:pointer; transition: all 0.3s;
         }
+        .btn-main:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102,252,241,0.3); }
+        .btn-main:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-sub {
             padding:10px 12px; background:#1f2833; color:var(--accent-color);
             border:1px solid var(--accent-color); border-radius:6px; cursor:pointer;
+            font-size: 0.75rem; font-weight: 600;
         }
-        .status { margin-top:15px; text-align:center; font-size:0.8rem; color:#888; }
+        .btn-sub:hover { background: var(--accent-color); color: #0b0c10; }
+        .status-box {
+            margin-top:12px; padding:12px; border-radius:8px; font-size:0.8rem;
+            background: rgba(0,0,0,0.4); border: 1px solid var(--border-color);
+        }
+        .status-info { color: var(--accent-color); }
+        .status-success { color: var(--success); }
+        .status-error { color: var(--error); }
+        .status-warning { color: var(--warning); }
+        .checksum { font-family: monospace; font-size: 0.7rem; word-break: break-all; }
+        .button-group { display:flex; gap:8px; margin-top:10px; flex-wrap: wrap; }
+        .button-group > * { flex: 1; min-width: 80px; }
+        .sync-guide { 
+            background: rgba(102,252,241,0.1); border: 1px solid var(--accent-color);
+            padding: 12px; border-radius: 8px; font-size: 0.8rem; margin: 12px 0;
+        }
+        .sync-guide ol { margin: 8px 0; padding-left: 20px; }
+        .sync-guide li { margin: 4px 0; }
     </style>
 </head>
 <body>
 
 <div class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂 - 100% JSON 同步 v2.0</h1>
+    <h1 class="header-title">⚔️ 放置天堂 - 100% JSON 同步 v3.0</h1>
+    <div class="version-badge">✨ 完全重構 | APK ↔ 網頁雙向同步 | 支持大文件</div>
 
+    <!-- 伺服器選擇 -->
     <div class="section-box">
         <label class="form-label">🌐 選擇目標伺服器</label>
         <select id="server-select" class="custom-input">
@@ -59,122 +91,366 @@
         </select>
     </div>
 
-    <div class="section-box">
-        <label class="form-label">📦 角色資料 JSON（支援 APK ↔ 網頁）</label>
-        <textarea id="save-json-textarea" class="custom-textarea" placeholder="貼上 JSON 或點擊下方按鈕讀取..."></textarea>
-        
-        <div style="display:flex; gap:8px; margin-top:10px;">
-            <button class="btn-sub" onclick="document.getElementById('json-file-input').click()">📁 讀取 .json 檔案</button>
-            <button class="btn-sub" onclick="exportFullDataToJSON()">📤 完整匯出 (推薦)</button>
-            <button class="btn-sub" onclick="clearAndImport()">🗑️ 清空後匯入</button>
-        </div>
-        <input type="file" id="json-file-input" accept=".json" style="display:none;" onchange="handleFileSelect(event)">
+    <!-- 同步指南 -->
+    <div class="sync-guide">
+        <strong>📋 同步步驟：</strong>
+        <ol>
+            <li><strong>從 APK 匯出：</strong> APK 內「設定」→「備份存檔」→「導出 JSON」</li>
+            <li><strong>上傳到這裡：</strong> 貼上 JSON 或點擊「讀取 .json 檔案」</li>
+            <li><strong>進入遊戲：</strong> 點擊「🚀 寫入資料並進入遊戲」</li>
+            <li><strong>返回 APK：</strong> 完成遊戲後，導出 JSON 並上傳回 APK</li>
+        </ol>
     </div>
 
-    <button class="btn-main" onclick="launchGameWithJSON()">🚀 寫入資料並進入遊戲</button>
+    <!-- 角色資料 -->
+    <div class="section-box">
+        <label class="form-label">📦 角色資料 JSON</label>
+        <textarea id="save-json-textarea" class="custom-textarea" placeholder="貼上 JSON 或點擊下方按鈕讀取..."></textarea>
+        
+        <div class="button-group">
+            <button class="btn-sub" onclick="document.getElementById('json-file-input').click()">📁 讀取檔案</button>
+            <button class="btn-sub" onclick="exportCharacterData()">📤 導出存檔</button>
+            <button class="btn-sub" onclick="validateJSON()">✓ 驗證資料</button>
+        </div>
+        <input type="file" id="json-file-input" accept=".json" style="display:none;" onchange="handleFileSelect(event)">
 
-    <div class="status">
-        v2.0 | 已強化 localStorage + 清理機制 | 適合 APK 與網頁雙向同步
+        <!-- 資料檢驗 -->
+        <div id="validation-status" class="status-box" style="display:none;">
+            <div id="validation-content"></div>
+        </div>
+    </div>
+
+    <!-- 主按鈕 -->
+    <button class="btn-main" id="launch-btn" onclick="launchGameWithJSON()">🚀 寫入資料並進入遊戲</button>
+    <button class="btn-main" id="clear-btn" style="background: linear-gradient(135deg, #ff6b6b, #ff4757); margin-top: 0;" onclick="clearAndImport()">🗑️ 清空後匯入</button>
+
+    <!-- 狀態訊息 -->
+    <div id="status-message" class="status-box" style="display:none;">
+        <div id="status-content"></div>
     </div>
 </div>
 
 <script>
-    const STORAGE_KEY_SAVE = "GLOBAL_CHARACTER_SAVE_JSON";
+    const CONFIG = {
+        STORAGE_KEY_SAVE: "IDLE_LINEAGE_CHARACTER_DATA",
+        STORAGE_KEY_CHECKSUM: "IDLE_LINEAGE_DATA_CHECKSUM",
+        STORAGE_KEY_TIMESTAMP: "IDLE_LINEAGE_LAST_SYNC",
+        MAX_URL_LENGTH: 6000,
+        DB_NAME: "IdleLineageDB",
+        DB_STORE: "saves"
+    };
 
-    // 完整匯出（推薦使用這個）
-    async function exportFullDataToJSON() {
-        try {
-            const data = {};
+    // ========== 工具函數 ==========
+    
+    // SHA-256 校驗碼
+    async function calculateChecksum(data) {
+        const encoder = new TextEncoder();
+        const dataBuffer = encoder.encode(data);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
 
-            // 1. 抓取 localStorage 全部
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                data[key] = localStorage.getItem(key);
-            }
-
-            // 2. 抓取 sessionStorage
-            data._sessionStorage = {};
-            for (let i = 0; i < sessionStorage.length; i++) {
-                const key = sessionStorage.key(i);
-                data._sessionStorage[key] = sessionStorage.getItem(key);
-            }
-
-            // 3. 加上時間戳與版本
-            data._exportInfo = {
-                version: "2.0",
-                timestamp: new Date().toISOString(),
-                type: "IdleLineage_Full_Save"
+    // 初始化 IndexedDB
+    async function initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(CONFIG.DB_NAME, 1);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(CONFIG.DB_STORE)) {
+                    db.createObjectStore(CONFIG.DB_STORE, { keyPath: 'id' });
+                }
             };
+        });
+    }
 
-            const jsonStr = JSON.stringify(data, null, 2);
-            const blob = new Blob([jsonStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
+    // 保存到 IndexedDB
+    async function saveToIndexedDB(jsonData) {
+        try {
+            const db = await initDB();
+            const tx = db.transaction(CONFIG.DB_STORE, 'readwrite');
+            const store = tx.objectStore(CONFIG.DB_STORE);
             
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `IdleLineage_FullSave_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
-            a.click();
+            const saveData = {
+                id: 'main',
+                data: jsonData,
+                timestamp: new Date().toISOString(),
+                checksum: await calculateChecksum(jsonData)
+            };
             
-            URL.revokeObjectURL(url);
-            alert('✅ 完整存檔已匯出！\n\n請把這個檔案傳到手機後，在 APK 內匯入。');
+            store.put(saveData);
+            return new Promise((resolve, reject) => {
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
         } catch (e) {
-            alert('匯出失敗：' + e.message);
+            console.warn('IndexedDB 保存失敗:', e);
+            return false;
         }
     }
 
+    // 從 IndexedDB 讀取
+    async function loadFromIndexedDB() {
+        try {
+            const db = await initDB();
+            const tx = db.transaction(CONFIG.DB_STORE, 'readonly');
+            const store = tx.objectStore(CONFIG.DB_STORE);
+            const request = store.get('main');
+            
+            return new Promise((resolve, reject) => {
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        } catch (e) {
+            console.warn('IndexedDB 讀取失敗:', e);
+            return null;
+        }
+    }
+
+    // 顯示狀態訊息
+    function showStatus(message, type = 'info') {
+        const statusEl = document.getElementById('status-message');
+        const contentEl = document.getElementById('status-content');
+        contentEl.innerHTML = `<span class="status-${type}">${message}</span>`;
+        statusEl.style.display = 'block';
+    }
+
+    // 隱藏狀態訊息
+    function hideStatus() {
+        document.getElementById('status-message').style.display = 'none';
+    }
+
+    // 顯示驗證結果
+    function showValidation(content) {
+        const validationEl = document.getElementById('validation-status');
+        const contentEl = document.getElementById('validation-content');
+        contentEl.innerHTML = content;
+        validationEl.style.display = 'block';
+    }
+
+    // ========== 主要功能 ==========
+
+    // 驗證 JSON
+    function validateJSON() {
+        const jsonText = document.getElementById('save-json-textarea').value.trim();
+        
+        if (!jsonText) {
+            showValidation(`<span class="status-error">❌ 請先輸入 JSON 資料</span>`);
+            return;
+        }
+
+        try {
+            const data = JSON.parse(jsonText);
+            
+            // 計算大小
+            const sizeKB = (new Blob([jsonText]).size / 1024).toFixed(2);
+            
+            // 計算物件數量
+            const gameKeys = Object.keys(data).filter(k => !k.startsWith('_')).length;
+            
+            // 生成校驗碼
+            calculateChecksum(jsonText).then(checksum => {
+                const validationHTML = `
+                    <div>
+                        <div><span class="status-success">✓ JSON 格式正確</span></div>
+                        <div style="margin-top: 8px; font-size: 0.75rem;">
+                            <div>📊 資料量: ${sizeKB} KB</div>
+                            <div>🔑 遊戲資料鍵值: ${gameKeys} 個</div>
+                            <div style="margin-top: 8px;">🔐 SHA-256:</div>
+                            <div class="checksum">${checksum}</div>
+                        </div>
+                    </div>
+                `;
+                showValidation(validationHTML);
+            });
+        } catch(e) {
+            showValidation(`<span class="status-error">❌ JSON 格式錯誤: ${e.message}</span>`);
+        }
+    }
+
+    // 導出存檔
+    async function exportCharacterData() {
+        try {
+            // 從 localStorage 抓遊戲資料
+            const gameData = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                // 排除非遊戲資料
+                if (!key.startsWith('IDLE_LINEAGE_') && key !== CONFIG.STORAGE_KEY_SAVE) {
+                    gameData[key] = localStorage.getItem(key);
+                }
+            }
+
+            // 添加匯出資訊
+            const exportData = {
+                ...gameData,
+                _exportMeta: {
+                    version: "3.0",
+                    timestamp: new Date().toISOString(),
+                    type: "IdleLineage_Character_Save",
+                    checksum: await calculateChecksum(JSON.stringify(gameData))
+                }
+            };
+
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+            
+            // 下載檔案
+            const blob = new Blob([jsonStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `IdleLineage_Save_${timestamp}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            // 同時保存到 IndexedDB 備份
+            await saveToIndexedDB(jsonStr);
+            
+            showStatus('✅ 存檔已導出並備份！', 'success');
+        } catch (e) {
+            showStatus(`❌ 導出失敗: ${e.message}`, 'error');
+        }
+    }
+
+    // 讀取檔案
     function handleFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
+        
         const reader = new FileReader();
         reader.onload = function(ev) {
-            document.getElementById('save-json-textarea').value = ev.target.result;
-            alert('✅ JSON 檔案讀取成功！');
+            try {
+                const content = ev.target.result;
+                JSON.parse(content); // 先驗證
+                document.getElementById('save-json-textarea').value = content;
+                showStatus('✅ JSON 檔案讀取成功！立即驗證...', 'success');
+                setTimeout(() => validateJSON(), 500);
+            } catch(e) {
+                showStatus(`❌ 檔案格式錯誤: ${e.message}`, 'error');
+            }
         };
         reader.readAsText(file);
     }
 
-    function clearAndImport() {
-        if (confirm('⚠️ 此操作會先清空目前所有遊戲資料，再匯入新存檔，確定要繼續嗎？')) {
-            localStorage.clear();
-            sessionStorage.clear();
-            launchGameWithJSON(true);
-        }
-    }
-
-    function launchGameWithJSON(clearFirst = false) {
-        const targetUrl = document.getElementById('server-select').value;
-        let jsonText = document.getElementById('save-json-textarea').value.trim();
-
-        if (jsonText) {
-            try {
-                JSON.parse(jsonText); // 驗證
-                localStorage.setItem(STORAGE_KEY_SAVE, jsonText);
-
-                const encoded = encodeURIComponent(jsonText);
-                let finalUrl = targetUrl;
-                
-                if (targetUrl.includes('?')) {
-                    finalUrl += "&inject_json=" + encoded;
-                } else {
-                    finalUrl += "#inject_json=" + encoded;
+    // 寫入遊戲資料
+    async function writeGameData(jsonData) {
+        try {
+            const data = JSON.parse(jsonData);
+            
+            // 清除舊資料
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!key.startsWith('IDLE_LINEAGE_') && key !== CONFIG.STORAGE_KEY_SAVE) {
+                    keysToRemove.push(key);
                 }
-
-                window.location.href = finalUrl;
-            } catch(e) {
-                alert('❌ JSON 格式錯誤，請確認後再試！');
             }
-        } else {
-            window.location.href = targetUrl;
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            // 寫入新資料
+            Object.keys(data).forEach(key => {
+                if (!key.startsWith('_')) {
+                    localStorage.setItem(key, data[key]);
+                }
+            });
+
+            // 記錄時間戳
+            localStorage.setItem(CONFIG.STORAGE_KEY_TIMESTAMP, new Date().toISOString());
+            
+            // 保存備份
+            await saveToIndexedDB(jsonData);
+            
+            return true;
+        } catch(e) {
+            throw new Error(`寫入資料失敗: ${e.message}`);
         }
     }
 
-    // 自動載入上次存檔
-    window.onload = () => {
-        const saved = localStorage.getItem(STORAGE_KEY_SAVE);
-        if (saved) {
-            document.getElementById('save-json-textarea').value = saved;
+    // 進入遊戲
+    async function launchGameWithJSON() {
+        const targetUrl = document.getElementById('server-select').value;
+        const jsonText = document.getElementById('save-json-textarea').value.trim();
+
+        if (!jsonText) {
+            showStatus('⚠️ 請先輸入或匯入存檔資料', 'warning');
+            return;
         }
-    };
+
+        try {
+            JSON.parse(jsonText); // 驗證
+            
+            // 寫入本地資料
+            await writeGameData(jsonText);
+            showStatus('⏳ 資料已寫入，正在進入遊戲...', 'info');
+            
+            // 檢查 JSON 大小
+            const jsonSize = jsonText.length;
+            let finalUrl = targetUrl;
+            
+            if (jsonSize < CONFIG.MAX_URL_LENGTH) {
+                // 小檔案通過 URL 傳遞
+                const encoded = encodeURIComponent(jsonText);
+                finalUrl = targetUrl + (targetUrl.includes('?') ? "&" : "#") + "inject_json=" + encoded;
+            } else {
+                // 大檔案只通過 localStorage + IndexedDB
+                showStatus('📦 大文件將通過本地存儲傳遞', 'info');
+            }
+            
+            // 延遲進入以確保資料寫入
+            setTimeout(() => {
+                window.location.href = finalUrl;
+            }, 500);
+            
+        } catch(e) {
+            showStatus(`❌ 錯誤: ${e.message}`, 'error');
+        }
+    }
+
+    // 清空並匯入
+    async function clearAndImport() {
+        const jsonText = document.getElementById('save-json-textarea').value.trim();
+        
+        if (!jsonText) {
+            showStatus('⚠️ 請先輸入存檔資料', 'warning');
+            return;
+        }
+
+        if (confirm('⚠️ 此操作會完全清空遊戲資料，確定要繼續嗎？')) {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                // 等待清空完成
+                setTimeout(async () => {
+                    await launchGameWithJSON();
+                }, 300);
+            } catch(e) {
+                showStatus(`❌ 清空失敗: ${e.message}`, 'error');
+            }
+        }
+    }
+
+    // 頁面載入
+    window.addEventListener('load', async () => {
+        // 嘗試從 IndexedDB 恢復
+        const backup = await loadFromIndexedDB();
+        if (backup) {
+            document.getElementById('save-json-textarea').value = backup.data;
+            const lastSync = new Date(backup.timestamp).toLocaleString('zh-TW');
+            showStatus(`📂 已載入上次備份 (${lastSync})`, 'info');
+        }
+    });
+
+    // 定期自動備份
+    setInterval(async () => {
+        const jsonText = document.getElementById('save-json-textarea').value.trim();
+        if (jsonText) {
+            await saveToIndexedDB(jsonText);
+        }
+    }, 60000); // 每分鐘備份一次
 </script>
 </body>
 </html>
