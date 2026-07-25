@@ -59,7 +59,7 @@
             font-size: 0.95rem;
         }
 
-        select, input[type="file"] {
+        select, input[type="file"], textarea {
             width: 100%;
             padding: 10px;
             border-radius: 6px;
@@ -150,7 +150,8 @@
         <select id="server-select">
             <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 增強外掛/掛機模式)</option>
             <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛模式)</option>
-            <option value="https://shines871.github.io/idle-lineage-class/?mode=clean">原版純淨模式 (100% 無外掛)</option>
+            <option value="https://shines871.github.io/idle-lineage-class/?mode=clean">原版純淨模式一 (100% 無外掛)</option>
+            <option value="https://pp771007.github.io/idle-lineage-class/?mode=clean">原版純淨模式二 (100% 無外掛)</option>
         </select>
     </div>
 
@@ -162,6 +163,12 @@
             <button class="btn-action" onclick="document.getElementById('import-save-file').click()">📥 匯入進度檔</button>
         </div>
         <input type="file" id="import-save-file" accept=".json" style="display: none;" onchange="importSaveData(event)">
+        
+        <!-- 備份文字顯示框（破解 App 無法下載檔案的備用機制） -->
+        <div id="export-text-container" style="display:none; margin-top:10px;">
+            <label style="font-size:0.8rem; color:#f39c12;">📋 存檔碼 (已自動複製到剪貼簿)：</label>
+            <textarea id="export-textarea" rows="3" readonly style="font-size:0.75rem;"></textarea>
+        </div>
     </div>
 
     <!-- 玩家自訂本地外掛 -->
@@ -177,7 +184,7 @@
 </div>
 
 <script>
-    const CURRENT_APK_VERSION = "1.2.0"; // 當前 APK 版本標籤
+    const CURRENT_APK_VERSION = "1.2.0"; // 當前 APK 版本標籤（與 version.json 對齊）
 
     // 0. 防快取跳轉 & 檢查 APK 版本更新
     (function() {
@@ -213,24 +220,44 @@
         }
     });
 
-    // 2. 匯出進度 (Export Save Data)
+    // 2. 萬能匯出進度 (修復 Android App 無法觸發下載問題)
     function exportSaveData() {
         const saveData = {};
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            // 排除啟動器自身的設定檔
             if (key !== 'custom_plugin_code' && key !== 'custom_plugin_name') {
                 saveData[key] = localStorage.getItem(key);
             }
         }
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", `idle_lineage_save_${Date.now()}.json`);
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
-        alert('進度檔案已成功匯出！');
+        
+        const jsonString = JSON.stringify(saveData);
+
+        // 機制 A：嘗試複製到剪貼簿並顯示在畫面框內（APK WebView 最穩定做法）
+        const textArea = document.getElementById('export-textarea');
+        const container = document.getElementById('export-text-container');
+        textArea.value = jsonString;
+        container.style.display = 'block';
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(jsonString);
+        }
+
+        // 機制 B：嘗試觸發檔案下載（適用於傳統瀏覽器）
+        try {
+            const blob = new Blob([jsonString], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `idle_lineage_save_${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.log("APK 阻擋了自動下載，已轉為剪貼簿模式");
+        }
+
+        alert('存檔已成功導出！\n\n若手機未跳出下載檔，存檔碼已自動複製到您的剪貼簿，並顯示在下方框內！');
     }
 
     // 3. 匯入進度 (Import Save Data)
