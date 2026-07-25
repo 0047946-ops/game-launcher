@@ -3,168 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - JSON極速匯入匯入門戶 v5.4</title>
+    <title>放置天堂 - 極速同步啟動門戶</title>
     <style>
         :root {
-            --bg-color: #0b0c10;
-            --card-bg: #1f2833;
-            --accent-color: #66fcf1;
-            --text-color: #c5c6c7;
-            --border-color: #45a29e;
-            --success: #00ff41;
-            --error: #ff6b6b;
-            --warning: #ffa500;
+            --bg: #0b0c10; --card: #1f2833; --accent: #66fcf1; --text: #c5c6c7;
+            --success: #00ff41; --error: #ff6b6b; --warning: #ffa500;
         }
-        body {
-            margin:0; padding:0; background:var(--bg-color); color:var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        body { 
+            margin:0; padding:12px; background:var(--bg); color:var(--text); 
+            font-family:-apple-system, BlinkMacSystemFont, sans-serif;
             display:flex; justify-content:center; align-items:center; min-height:100vh;
+            box-sizing:border-box;
         }
-        .launcher-card {
-            width: 92%; max-width: 560px; background: var(--card-bg);
-            border: 1px solid var(--border-color); border-radius: 16px;
-            padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.9);
+        .card { 
+            width:100%; max-width:480px; background:var(--card); 
+            border:1px solid var(--accent); border-radius:16px; padding:20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9); box-sizing:border-box;
         }
-        .header-title { 
-            font-size: 1.45rem; text-align:center; color:var(--accent-color); 
-            margin:0 0 10px 0; font-weight:900; 
-        }
-        .version-badge {
-            text-align: center; font-size: 0.75rem; color: var(--warning);
-            margin-bottom: 16px; font-weight: bold;
-        }
-        .section-box {
-            border: 1px dashed var(--border-color); padding:16px; border-radius:12px;
-            background:#0b0c10; margin-bottom:18px;
-        }
-        .form-label { display:block; font-weight:700; margin-bottom:8px; color:var(--accent-color); }
-        .custom-input {
-            width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color);
-            background:#1f2833; color:#fff; box-sizing:border-box; font-size:0.85rem;
-        }
+        h2 { text-align:center; color:var(--accent); margin:0 0 10px 0; font-size: 1.35rem; font-weight:900; }
+        .sub-title { text-align:center; font-size:0.75rem; color:var(--warning); margin-bottom:16px; font-weight:bold; }
         
-        .btn-main {
-            width:100%; padding:14px; margin:8px 0;
-            background:linear-gradient(135deg, #66fcf1, #45a29e);
-            color:#0b0c10; border:none; border-radius:10px; font-size:1.05rem; font-weight:900;
-            cursor:pointer; transition: all 0.25s;
+        .box {
+            background:#0b0c10; border:1px dashed var(--accent); border-radius:10px;
+            padding:14px; margin-bottom:14px;
         }
-        .btn-main:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(102,252,241,0.3); }
+        .label { display:block; font-size:0.85rem; font-weight:bold; color:var(--accent); margin-bottom:6px; }
         
-        .btn-direct {
-            background: linear-gradient(135deg, #00ff41, #00b32d);
-            color: #000;
+        .btn {
+            width:100%; padding:14px; margin:6px 0; border:none; border-radius:10px;
+            font-size:0.95rem; font-weight:900; cursor:pointer; transition:all 0.2s;
+            box-sizing:border-box; text-align:center;
         }
-        
-        .btn-file {
-            background: linear-gradient(135deg, #ffa500, #ff7c00);
-            color: #000;
-            font-weight: 800;
-        }
+        .btn-direct { background:linear-gradient(135deg, #00ff41, #00b32d); color:#000; }
+        .btn-file { background:linear-gradient(135deg, #ffa500, #ff7c00); color:#000; }
+        .btn-sync { background:linear-gradient(135deg, #66fcf1, #45a29e); color:#0b0c10; }
 
-        .btn-export {
-            background: linear-gradient(135deg, #38ef7d, #11998e);
-            color: #fff;
-            font-weight: 800;
+        select {
+            width:100%; padding:12px; background:#1f2833; color:#fff;
+            border:1px solid var(--accent); border-radius:8px; font-size:0.9rem;
+            box-sizing:border-box; margin-bottom:8px;
         }
         
-        .status-box {
-            margin-top:12px; padding:12px; border-radius:8px; font-size:0.85rem;
-            background: rgba(0,0,0,0.4); border: 1px solid var(--border-color);
-            word-break: break-all;
-        }
-        .status-info { color: var(--accent-color); }
-        .status-success { color: var(--success); }
-        .status-error { color: var(--error); }
-        .status-warning { color: var(--warning); }
-        
-        .file-info-tag {
-            background: #1f2833; border: 1px solid var(--accent-color);
-            padding: 10px; border-radius: 8px; margin-top: 10px; font-size: 0.8rem;
-            display: flex; justify-content: space-between; align-items: center;
+        .status {
+            margin-top:10px; padding:10px; background:rgba(0,0,0,0.6); 
+            border-radius:8px; font-size:0.8rem; word-break:break-all; line-height:1.4;
         }
     </style>
 </head>
 <body>
 
-<div class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂 - 全能門戶 v5.4</h1>
-    <div class="version-badge">⚡ 專為 .json 檔設計 | 一鍵選檔匯入 / 一鍵打包匯出</div>
+<div class="card">
+    <h2>⚡ 放置天堂 - 極速門戶</h2>
+    <div class="sub-title">📱 原生橋接模式已啟用 | 檔案雙向同步無感轉移</div>
 
     <!-- 伺服器選擇 -->
-    <div class="section-box">
-        <label class="form-label">🌐 選擇目標伺服器節點</label>
-        <select id="server-select" class="custom-input">
-            <option value="pp771007">伺服器二 (pp771007 - 雙外掛全功能模式)</option>
-            <option value="shines871">伺服器一 (shines871 - 離線掛機增強模式)</option>
+    <div class="box">
+        <label class="label">🌐 選擇目標伺服器</label>
+        <select id="server">
+            <option value="pp771007">伺服器二 (pp771007 - 雙外掛全功能)</option>
+            <option value="shines871">伺服器一 (shines871 - 離線增強)</option>
         </select>
+        <button class="btn btn-direct" onclick="directPlay()">🎮 免存檔直接進入遊戲</button>
     </div>
 
-    <!-- 免存檔直達入口 -->
-    <button class="btn-main btn-direct" onclick="launchDirectNoSave()">🎮 免存檔直接進入遊戲 (直達選角/創角)</button>
-
-    <!-- .json 檔一鍵匯入／匯出專區 -->
-    <div class="section-box" style="margin-top: 15px;">
-        <label class="form-label">📁 JSON 存檔檔極速處理區</label>
+    <!-- JSON 檔案處理 -->
+    <div class="box">
+        <label class="label">📂 JSON 存檔極速處理</label>
         
-        <!-- 隱藏的原生檔案選擇器 -->
-        <input type="file" id="json-file-input" accept=".json,.txt" style="display:none;" onchange="handleJsonFileSelect(event)">
-
-        <!-- 選擇檔案按鈕 -->
-        <button class="btn-main btn-file" onclick="triggerFileSelect()">📂 點此選擇 .json 存檔檔匯入</button>
+        <input type="file" id="fileInput" accept=".json,.txt" style="display:none;" onchange="handleFileSelect(event)">
         
-        <!-- 匯出檔案按鈕 -->
-        <button class="btn-main btn-export" onclick="exportCurrentJsonFile()">📤 一鍵匯出本機進度為 .json 檔</button>
-
-        <div id="file-loaded-status" style="display:none;" class="file-info-tag">
-            <span id="file-name-text">已載入: 無</span>
-            <span style="color:var(--success); font-weight:bold;">✓ 解析成功</span>
-        </div>
+        <button class="btn btn-file" onclick="document.getElementById('fileInput').click()">📂 選擇手機中的 .json 檔匯入登入</button>
+        <button class="btn btn-sync" onclick="exportCurrentSave()">📤 一鍵匯出本機進度 JSON 檔</button>
     </div>
 
-    <!-- 帶存檔進入遊戲按鈕 -->
-    <button id="btn-launch-save" class="btn-main" style="display:none;" onclick="launchGameWithLoadedJson()">🚀 載入此 .json 並啟動遊戲</button>
-
-    <button class="btn-main" style="background: linear-gradient(135deg, #ff6b6b, #ff4757); margin-top: 15px; font-size:0.85rem;" onclick="clearBeforeLaunch()">🗑️ 清空本機暫存與舊資料</button>
-
-    <div id="status-message" class="status-box" style="display:none;">
-        <div id="status-content"></div>
+    <!-- 剪貼簿一鍵感應 -->
+    <div class="box">
+        <label class="label">📋 快貼模式</label>
+        <button class="btn" style="background:#a8ff78; color:#000;" onclick="readFromClipboard()">⚡ 自動讀取手機剪貼簿並登入</button>
     </div>
+
+    <div id="msg" class="status" style="display:none;"></div>
 </div>
 
 <script>
-    const SERVER_URLS = {
+    const SERVERS = {
         'shines871': 'https://shines871.github.io/idle-lineage-class/',
         'pp771007': 'https://pp771007.github.io/idle-lineage-class/'
     };
 
-    let loadedJsonData = null;
-
-    function showStatus(msg, type = 'info') {
-        const el = document.getElementById('status-message');
-        document.getElementById('status-content').innerHTML = `<span class="status-${type}">${msg}</span>`;
+    function log(txt, type = 'info') {
+        const el = document.getElementById('msg');
         el.style.display = 'block';
+        el.style.color = type === 'error' ? '#ff6b6b' : (type === 'success' ? '#00ff41' : '#66fcf1');
+        el.innerHTML = txt;
     }
 
-    // 1. 免存檔直接進入
-    function launchDirectNoSave() {
-        const serverKey = document.getElementById('server-select').value;
-        const baseUrl = SERVER_URLS[serverKey];
-
-        showStatus('⚡ 正在導向遊戲... 將直接開啟角色選擇與創角面板！', 'success');
-        
-        setTimeout(() => {
-            window.location.href = baseUrl + '#action=create';
-        }, 300);
+    // 1. 免存檔直接開啟
+    function directPlay() {
+        const url = SERVERS[document.getElementById('server').value];
+        log('⚡ 正在載入遊戲創角選單...', 'success');
+        setTimeout(() => { window.location.href = url + '#action=create'; }, 300);
     }
 
-    // 2. 觸發原生檔案選擇器
-    function triggerFileSelect() {
-        document.getElementById('json-file-input').click();
-    }
-
-    // 3. 讀取並處理玩家選擇的 .json 檔
-    function handleJsonFileSelect(e) {
+    // 2. 處理玩家選取 .json 檔案
+    function handleFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -172,105 +114,64 @@
         reader.onload = function(ev) {
             try {
                 const content = ev.target.result.trim();
-                
-                // 驗證是否為合法 JSON 或原廠 SIG 簽章檔
-                if (!content.startsWith('{') && !content.startsWith('[') && !content.startsWith('SIG1:') && !content.startsWith('SIG2:')) {
-                    throw new Error('檔案格式不正確，必須為 .json 格式存檔');
-                }
-
-                loadedJsonData = content;
-                
-                // 更新 UI
-                document.getElementById('file-name-text').innerText = `📄 ${file.name}`;
-                document.getElementById('file-loaded-status').style.display = 'flex';
-                document.getElementById('btn-launch-save').style.display = 'block';
-                
-                showStatus(`✅ 存檔「${file.name}」解析成功！請點擊下方按鈕登入遊戲。`, 'success');
-
+                saveAndLaunch(content, `檔案「${file.name}」載入成功！`);
             } catch (err) {
-                showStatus(`❌ 讀取失敗: ${err.message}`, 'error');
-                loadedJsonData = null;
-                document.getElementById('file-loaded-status').style.display = 'none';
-                document.getElementById('btn-launch-save').style.display = 'none';
+                log('❌ 檔案解析失敗，請確定是否為合法 JSON 存檔！', 'error');
             }
         };
         reader.readAsText(file);
     }
 
-    // 4. 一鍵載入並登入遊戲
-    function launchGameWithLoadedJson() {
-        if (!loadedJsonData) {
-            showStatus('⚠️ 請先點擊按鈕選擇 .json 檔案！', 'warning');
-            return;
+    // 3. 一鍵匯出存檔至 Download 資料夾
+    function exportCurrentSave() {
+        let save = localStorage.getItem('RAW_INJECT_SAVE_DATA');
+        if (!save && window.AndroidBridge && window.AndroidBridge.loadGameData) {
+            save = window.AndroidBridge.loadGameData();
         }
 
-        try {
-            // 寫入暫存存檔
-            localStorage.setItem('RAW_INJECT_SAVE_DATA', loadedJsonData);
+        if (!save) {
+            return log('⚠️ 目前本機沒有角色存檔資料！', 'error');
+        }
 
-            const serverKey = document.getElementById('server-select').value;
-            const baseUrl = SERVER_URLS[serverKey];
-
-            showStatus('🚀 存檔注入成功！正在自動導向進入遊戲...', 'success');
-            
-            setTimeout(() => {
-                window.location.href = baseUrl + '#action=inject';
-            }, 300);
-
-        } catch (e) {
-            showStatus(`❌ 寫入失敗: ${e.message}`, 'error');
+        if (window.AndroidBridge && window.AndroidBridge.saveBase64File) {
+            // 使用 Base64 轉換透過原生 Android 導出
+            const base64 = btoa(unescape(encodeURIComponent(save)));
+            window.AndroidBridge.saveBase64File(base64, `fable5_save_${Date.now()}.json`);
+            log('✅ 存檔已指令匯出，請至手機 Download 資料夾查看！', 'success');
+        } else {
+            log('⚠️ 未偵測到原生 Android 橋樑', 'error');
         }
     }
 
-    // 5. 一鍵下載／匯出本機存檔為 .json 檔案
-    function exportCurrentJsonFile() {
-        let foundSave = null;
-        for (let i = 0; i < localStorage.length; i++) {
-            let key = localStorage.key(i);
-            if (key.includes('fable') || key.includes('save') || key.includes('IDLE')) {
-                foundSave = localStorage.getItem(key);
-                break;
+    // 4. 自動讀取剪貼簿
+    function readFromClipboard() {
+        if (window.AndroidBridge && window.AndroidBridge.getClipboardText) {
+            const clipText = window.AndroidBridge.getClipboardText();
+            if (clipText && clipText.length > 10) {
+                saveAndLaunch(clipText, '✅ 成功從手機剪貼簿讀取存檔！');
+            } else {
+                log('⚠️ 手機剪貼簿中沒有找到有效的存檔內容！', 'error');
             }
-        }
-
-        if (!foundSave && localStorage.getItem('RAW_INJECT_SAVE_DATA')) {
-            foundSave = localStorage.getItem('RAW_INJECT_SAVE_DATA');
-        }
-
-        if (!foundSave) {
-            showStatus('⚠️ 本機無歷史存檔！請先進入遊戲遊玩並存檔後再來匯出。', 'warning');
-            return;
-        }
-
-        try {
-            // 轉成可讀性高且標準格式的 JSON 下載包
-            const blob = new Blob([foundSave], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            
-            const dateStr = new Date().toISOString().slice(0,10);
-            a.href = url;
-            a.download = `fable5_save_${dateStr}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            showStatus(`🎉 成功匯出存檔「fable5_save_${dateStr}.json」！`, 'success');
-
-        } catch (e) {
-            showStatus(`❌ 匯出檔案失敗: ${e.message}`, 'error');
+        } else {
+            log('⚠️ 剪貼簿讀取未獲得權限或原生接口未開啟', 'error');
         }
     }
 
-    function clearBeforeLaunch() {
-        if (confirm('⚠️ 確定要清空本機暫存嗎？')) {
-            localStorage.clear();
-            loadedJsonData = null;
-            document.getElementById('file-loaded-status').style.display = 'none';
-            document.getElementById('btn-launch-save').style.display = 'none';
-            showStatus('✅ 本機暫存已清空！', 'success');
+    // 統一注入並跳轉
+    function saveAndLaunch(saveData, successMsg) {
+        localStorage.setItem('RAW_INJECT_SAVE_DATA', saveData);
+        
+        // 雙重存入 Android 原生空間
+        if (window.AndroidBridge && window.AndroidBridge.saveGameData) {
+            window.AndroidBridge.saveGameData(saveData);
         }
+
+        log(`${successMsg}<br>🚀 正在開啟遊戲...`, 'success');
+
+        setTimeout(() => {
+            const url = SERVERS[document.getElementById('server').value];
+            window.location.href = url + '#action=inject';
+        }, 400);
     }
 </script>
 </body>
