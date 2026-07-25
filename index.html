@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- 防快取標籤配置 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -13,7 +12,6 @@
             --bg-color: #0b0c10;
             --card-bg: #1f2833;
             --accent-color: #66fcf1;
-            --accent-hover: #45a29e;
             --text-color: #c5c6c7;
             --border-color: #45a29e;
             --danger-color: #ff4d4d;
@@ -31,7 +29,6 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            box-sizing: border-box;
         }
 
         .launcher-card {
@@ -52,7 +49,6 @@
             color: var(--accent-color);
             margin: 0 0 20px 0;
             font-weight: 800;
-            letter-spacing: 1px;
         }
 
         .section-box {
@@ -94,11 +90,6 @@
             font-weight: 800;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(102, 252, 241, 0.3);
-            transition: transform 0.1s ease;
-        }
-
-        .btn-main:active {
-            transform: scale(0.98);
         }
 
         .btn-sub {
@@ -157,7 +148,7 @@
 <div id="launcher-ui" class="launcher-card">
     <h1 class="header-title">⚔️ 放置天堂全能雲端啟動器</h1>
 
-    <!-- 1. 運行伺服器節點選擇 -->
+    <!-- 1. 伺服器選擇 -->
     <div class="section-box">
         <label class="form-label" for="server-select">🌐 選擇運行伺服器節點：</label>
         <select id="server-select" class="custom-select">
@@ -166,17 +157,14 @@
         </select>
     </div>
 
-    <!-- 2. 本機角色存檔快捷同步/寫入 -->
+    <!-- 2. 存檔快捷注入工具（備用） -->
     <div class="section-box">
-        <label class="form-label">💾 角色存檔同步（一次性貼上寫入）：</label>
-        <textarea id="save-input" class="custom-textarea" rows="2" placeholder="貼上從 Chrome 網頁版複製的存檔文字..."></textarea>
-        <div style="display: flex; gap: 8px;">
-            <button class="btn-sub" style="flex: 1; background: var(--success-color); color:#000; border:none;" onclick="importSaveData()">📥 寫入角色存檔</button>
-            <button class="btn-sub" style="flex: 1;" onclick="exportSaveData()">📤 匯出 APK 存檔</button>
-        </div>
+        <label class="form-label">💾 快速注入存檔至目標伺服器：</label>
+        <textarea id="save-input" class="custom-textarea" rows="2" placeholder="貼上 Chrome 網頁版導出的存檔文字..."></textarea>
+        <button class="btn-sub" style="width: 100%; background: var(--success-color); color:#000; border:none;" onclick="injectSaveToTarget()">📥 一鍵注入存檔並進入遊戲</button>
     </div>
 
-    <!-- 3. 玩家自訂外掛腳本鏈管理 -->
+    <!-- 3. 自訂外掛腳本鏈管理 -->
     <div class="section-box">
         <label class="form-label">🧩 玩家自訂外掛腳本鏈：</label>
         <input type="text" id="plugin-input" class="custom-input" placeholder="貼上自訂腳本網址 (https://...)">
@@ -184,10 +172,10 @@
         <div id="plugin-list" style="margin-top: 8px;"></div>
     </div>
 
-    <!-- 4. 啟動遊戲按鈕 -->
-    <button class="btn-main" onclick="startGameEngine()">🚀 啟動遊戲引擎並載入正確畫面</button>
+    <!-- 4. 啟動按鈕 -->
+    <button class="btn-main" onclick="directToTargetGame()">🚀 切換至目標伺服器 (讀取原網頁角色)</button>
 
-    <div id="status-display" class="system-status">當前版本 v1.3.0 | 資源路徑校正修復已就緒</div>
+    <div id="status-display" class="system-status">當前版本 v1.3.0 | 原生同源資料流模式已啟動</div>
 </div>
 
 <script>
@@ -200,7 +188,7 @@
         renderPlugins();
     });
 
-    // 版本自動檢查
+    // 1. 版本檢查
     function executeVersionCheck() {
         const currentUrl = new URL(window.location.href);
         if (!currentUrl.searchParams.has('v')) {
@@ -213,7 +201,7 @@
             .then(res => res.json())
             .then(data => {
                 if (data.latestVersion && data.latestVersion !== SYSTEM_VERSION) {
-                    if (confirm(`🎉 發現最新版本啟動器 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即下載新版更新？`)) {
+                    if (confirm(`🎉 發現最新版本啟動器 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即下載新版？`)) {
                         window.location.href = data.downloadUrl;
                     }
                 }
@@ -221,31 +209,7 @@
             .catch(() => {});
     }
 
-    // 存檔匯入/匯出
-    function importSaveData() {
-        const str = document.getElementById('save-input').value.trim();
-        if (!str) return alert('請先貼上存檔文字！');
-        try {
-            const data = JSON.parse(str);
-            Object.keys(data).forEach(k => localStorage.setItem(k, data[k]));
-            alert('✅ 角色存檔已成功寫入 APK！');
-            document.getElementById('save-input').value = "";
-        } catch(e) {
-            alert('❌ 存檔格式不正確！');
-        }
-    }
-
-    function exportSaveData() {
-        const saveObj = {};
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            saveObj[key] = localStorage.getItem(key);
-        }
-        document.getElementById('save-input').value = JSON.stringify(saveObj);
-        alert('📤 已將本機所有角色資料打包匯出至下方文字框！');
-    }
-
-    // 外掛腳本管理
+    // 2. 玩家自訂外掛管理
     function getPlugins() {
         try { return JSON.parse(localStorage.getItem(STORAGE_KEY_PLUGINS)) || []; }
         catch(e) { return []; }
@@ -257,7 +221,7 @@
         listContainer.innerHTML = "";
 
         if (plugins.length === 0) {
-            listContainer.innerHTML = `<div style="text-align:center; color:#666; font-size:0.78rem;">無自訂腳本 (預設自動載入官方外掛鏈)</div>`;
+            listContainer.innerHTML = `<div style="text-align:center; color:#666; font-size:0.78rem;">無自訂腳本</div>`;
             return;
         }
 
@@ -275,10 +239,10 @@
     function addPlugin() {
         const input = document.getElementById('plugin-input');
         const url = input.value.trim();
-        if (!url || !url.startsWith('http')) return alert('請輸入正確的 HTTP/HTTPS 腳本網址！');
+        if (!url || !url.startsWith('http')) return alert('請輸入正確的 HTTP/HTTPS 網址！');
 
         const plugins = getPlugins();
-        if (plugins.includes(url)) return alert('該腳本已被掛載！');
+        if (plugins.includes(url)) return alert('腳本已存在！');
 
         plugins.push(url);
         localStorage.setItem(STORAGE_KEY_PLUGINS, JSON.stringify(plugins));
@@ -293,56 +257,22 @@
         renderPlugins();
     }
 
-    // 🚀 核心靈魂修復：完美渲染遊戲主體畫面
-    function startGameEngine() {
+    // 3. 直接切換至目標伺服器（真正讀取原本 Google 瀏覽器第 4 張圖的角色資料！）
+    function directToTargetGame() {
         const targetUrl = document.getElementById('server-select').value;
-        const statusElement = document.getElementById('status-display');
-        
-        statusElement.innerText = "正在拉取遊戲資源並修復相對路徑...";
-        statusElement.style.color = "#66fcf1";
-
-        document.getElementById('launcher-ui').style.display = 'none';
-
-        fetch(targetUrl)
-            .then(res => res.text())
-            .then(html => {
-                // 自動插入 <base> 標籤，解決所有 CSS 與圖片找不到的問題（還原第二張圖）
-                const baseTag = `<base href="${targetUrl}">`;
-                let fixedHtml = html;
-                
-                if (fixedHtml.includes('<head>')) {
-                    fixedHtml = fixedHtml.replace('<head>', '<head>' + baseTag);
-                } else {
-                    fixedHtml = baseTag + fixedHtml;
-                }
-
-                document.open();
-                document.write(fixedHtml);
-                document.close();
-
-                // 待 DOM 與背景載入完畢後，精準注入外掛
-                setTimeout(() => {
-                    injectScript('https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js');
-                    injectScript('https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now());
-
-                    if (targetUrl.includes('shines871.github.io')) {
-                        injectScript('https://pp771007.github.io/idle-lineage-class/offline.js?t=' + Date.now());
-                    }
-
-                    getPlugins().forEach(scriptUrl => {
-                        injectScript(scriptUrl);
-                    });
-                }, 1000);
-            })
-            .catch(() => {
-                window.location.href = targetUrl;
-            });
+        // 真正跳轉網址，確保網址列變成 pp771007.github.io
+        window.location.href = targetUrl;
     }
 
-    function injectScript(src) {
-        const s = document.createElement('script');
-        s.src = src;
-        document.head.appendChild(s);
+    // 4. 如果是跨端/跨裝置，可點擊一鍵把文字存檔帶過去寫入
+    function injectSaveToTarget() {
+        const str = document.getElementById('save-input').value.trim();
+        if (!str) return alert('請先貼上存檔文字！');
+        
+        const targetUrl = document.getElementById('server-select').value;
+        // 將存檔放在 URL Hash 帶過去
+        const encodedSave = encodeURIComponent(str);
+        window.location.href = targetUrl + "#inject_save=" + encodedSave;
     }
 </script>
 
