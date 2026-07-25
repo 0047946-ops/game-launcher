@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - 100% 同步門戶 v3.6</title>
+    <title>放置天堂 - 100% 同步門戶 v3.7</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -77,8 +77,8 @@
 <body>
 
 <div class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂 - 同步門戶 v3.6</h1>
-    <div class="version-badge">✨ 修復 SIG1 解析 | 精確格式識別</div>
+    <h1 class="header-title">⚔️ 放置天堂 - 同步門戶 v3.7</h1>
+    <div class="version-badge">✨ 萬能 SIG1 容錯解構器 | 雙軌動態注入</div>
 
     <!-- 伺服器選擇 -->
     <div class="section-box">
@@ -94,8 +94,8 @@
         <strong>📋 使用說明：</strong><br>
         <strong style="color: #00ff41;">🟢 情況 A：APK → 網頁</strong><br>
         1. 在 APK 內遊玩完成<br>
-        2. APK 設定→備份存檔→導出 JSON<br>
-        3. 把 JSON 內容貼到下方<br>
+        2. APK 設定→備份存檔→導出 JSON 或 SIG1<br>
+        3. 把文字或檔案內容貼到下方<br>
         4. 點「🚀 進入遊戲」即可在網頁版還原<br>
         <br>
         <strong style="color: #66fcf1;">🟦 情況 B：網頁 → APK</strong><br>
@@ -107,15 +107,15 @@
 
     <!-- 角色資料 -->
     <div class="section-box">
-        <label class="form-label">📦 貼上 JSON 存檔</label>
-        <textarea id="save-json-textarea" class="custom-textarea" placeholder="從 APK 或網頁導出的 JSON 內容"></textarea>
+        <label class="form-label">📦 貼上 JSON 或 SIG1 存檔</label>
+        <textarea id="save-json-textarea" class="custom-textarea" placeholder="從 APK 或網頁導出的 JSON / SIG1 內容"></textarea>
         
         <div class="button-group">
             <button class="btn-sub" onclick="document.getElementById('json-file-input').click()">📁 讀取檔案</button>
             <button class="btn-sub" onclick="exportFromGame()">📤 導出存檔</button>
             <button class="btn-sub" onclick="validateData()">✓ 驗證</button>
         </div>
-        <input type="file" id="json-file-input" accept=".json" style="display:none;" onchange="handleFileSelect(event)">
+        <input type="file" id="json-file-input" accept=".json,.txt" style="display:none;" onchange="handleFileSelect(event)">
 
         <!-- 資料檢驗 -->
         <div id="validation-status" class="status-box" style="display:none;">
@@ -152,79 +152,67 @@
         }
     };
 
-    // ===== v3.6 完全重寫 SIG1 解析 =====
+    // ===== 🔥 v3.7 萬能 SIG1 容錯解構器 =====
     function parseSIG1(rawData) {
-        if (typeof rawData !== 'string') {
-            console.error('[parseSIG1] 輸入不是字串:', typeof rawData);
-            return null;
+        if (typeof rawData !== 'string') return null;
+
+        // 1. 預先清除不可見字元與換行符號
+        let cleanText = rawData.replace(/[\r\n\t\s]/g, '');
+
+        if (!cleanText.startsWith('SIG1:')) {
+            return cleanText; // 不是 SIG1，直接返回原文
         }
 
-        // 不是 SIG1 格式，直接返回
-        if (!rawData.startsWith('SIG1:')) {
-            console.log('[parseSIG1] 不是 SIG1 格式，視為純資料');
-            return rawData;
-        }
-
-        console.log('[parseSIG1] 開始解析 SIG1 格式');
-        console.log('[parseSIG1] 輸入長度:', rawData.length);
+        console.log('[parseSIG1] 開始進行深度 SIG1 解碼，總長度:', cleanText.length);
 
         try {
-            // SIG1 格式分析:
-            // SIG1: = 5 字元
-            // 後面是: 簽章:Base64內容
-            // 或: Base64內容
+            // 2. 切除 SIG1: 前綴
+            let body = cleanText.substring(5);
+            let base64Candidate = '';
 
-            const contentAfterSIG1 = rawData.substring(5);
-            console.log('[parseSIG1] 去掉 SIG1: 前綴後長度:', contentAfterSIG1.length);
-            console.log('[parseSIG1] 前 50 字:', contentAfterSIG1.substring(0, 50));
-
-            // 找冒號的位置
-            const colonIndex = contentAfterSIG1.indexOf(':');
-            console.log('[parseSIG1] 冒號位置:', colonIndex);
-
-            let base64Part = '';
-
-            if (colonIndex === -1) {
-                // 沒有冒號，整個都是 Base64
-                console.log('[parseSIG1] 格式: SIG1:Base64');
-                base64Part = contentAfterSIG1;
+            // 3. 處理包含多重冒號的狀況，抓取最後一段或主體段落
+            if (body.includes(':')) {
+                const parts = body.split(':');
+                // 優先過濾出最長且符合 Base64 特徵的區塊
+                base64Candidate = parts.reduce((a, b) => a.length > b.length ? a : b);
             } else {
-                // 有冒號，取冒號後面的部分作為 Base64
-                console.log('[parseSIG1] 格式: SIG1:簽章:Base64');
-                base64Part = contentAfterSIG1.substring(colonIndex + 1);
+                base64Candidate = body;
             }
 
-            console.log('[parseSIG1] Base64 部分長度:', base64Part.length);
-            console.log('[parseSIG1] Base64 前 50 字:', base64Part.substring(0, 50));
+            // 4. 清理 Base64 字串中的非法字元，確保完整性
+            base64Candidate = base64Candidate.replace(/[^A-Za-z0-9+/=]/g, '');
 
-            // 驗證 Base64 格式（應該是字母、數字、+、/、=）
-            if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Part)) {
-                console.warn('[parseSIG1] Base64 格式不正確，包含非法字元');
-                // 嘗試用正則表達式提取 Base64
-                const match = base64Part.match(/[A-Za-z0-9+/]+=*/);
-                if (match) {
-                    base64Part = match[0];
-                    console.log('[parseSIG1] 正則提取後:', base64Part.substring(0, 50));
-                } else {
-                    throw new Error('無法找到有效的 Base64 內容');
-                }
+            // 5. 自動補齊 Base64 的 `=` 號 padding
+            while (base64Candidate.length % 4 !== 0) {
+                base64Candidate += '=';
             }
 
-            // 解碼 Base64
-            const decoded = atob(base64Part);
-            console.log('[parseSIG1] 解碼成功，長度:', decoded.length);
-            console.log('[parseSIG1] 前 100 字:', decoded.substring(0, 100));
-
-            return decoded;
+            // 6. 執行跨端二進位 UTF-8 安全解碼 (避免中文亂碼與 atob 崩潰)
+            const binaryStr = atob(base64Candidate);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
+            
+            const decodedResult = new TextDecoder('utf-8').decode(bytes);
+            console.log('[parseSIG1] 解碼成功！前 60 字元:', decodedResult.substring(0, 60));
+            return decodedResult;
 
         } catch (e) {
-            console.error('[parseSIG1] 解析失敗:', e);
-            console.error('[parseSIG1] 錯誤詳情:', e.message);
+            console.error('[parseSIG1] 嘗試標準解碼失敗，啟用降級向下相容模式...', e);
+            try {
+                // 降級備用模式：強制提取正則匹配
+                const match = cleanText.match(/[A-Za-z0-9+/]{20,}={0,2}/);
+                if (match) {
+                    return decodeURIComponent(escape(atob(match[0])));
+                }
+            } catch (err) {
+                console.error('[parseSIG1] 降級模式亦失敗:', err);
+            }
             return null;
         }
     }
 
-    // 顯示狀態訊息
     function showStatus(message, type = 'info') {
         const statusEl = document.getElementById('status-message');
         const contentEl = document.getElementById('status-content');
@@ -232,7 +220,6 @@
         statusEl.style.display = 'block';
     }
 
-    // 顯示驗證結果
     function showValidation(content) {
         const validationEl = document.getElementById('validation-status');
         const contentEl = document.getElementById('validation-content');
@@ -240,7 +227,6 @@
         validationEl.style.display = 'block';
     }
 
-    // 驗證資料
     function validateData() {
         const input = document.getElementById('save-json-textarea').value.trim();
         
@@ -250,59 +236,44 @@
         }
 
         try {
-            console.log('[validateData] 開始驗證，輸入長度:', input.length);
-            console.log('[validateData] 前 50 字:', input.substring(0, 50));
-
             let data = input;
-            let isSIG1 = false;
 
-            // 解析 SIG1 格式
             if (input.startsWith('SIG1:')) {
-                console.log('[validateData] 偵測到 SIG1 格式');
-                isSIG1 = true;
                 const decoded = parseSIG1(input);
                 if (!decoded) {
-                    showValidation(`<span class="status-error">❌ SIG1 簽章解析失敗<br>請檢查 F12 Console 看詳細日誌</span>`);
+                    showValidation(`<span class="status-error">❌ SIG1 簽章解構失敗<br>請確認複製的存檔文字是否完整</span>`);
                     return;
                 }
                 data = decoded;
-                console.log('[validateData] SIG1 解析成功');
             }
 
-            // 驗證 JSON
-            console.log('[validateData] 嘗試解析 JSON');
             const parsed = JSON.parse(data);
-            console.log('[validateData] JSON 解析成功');
-
             const saveKeys = CONFIG.GAME_SAVE_KEYS.filter(key => parsed.hasOwnProperty(key));
-            
             const sizeKB = (new Blob([data]).size / 1024).toFixed(2);
             
             let validationHTML = `
-                <div><span class="status-success">✓ 資料有效</span></div>
+                <div><span class="status-success">✓ SIG1 / JSON 解析成功！</span></div>
                 <div style="margin-top: 8px; font-size: 0.75rem;">
-                    <div>📊 大小: ${sizeKB} KB</div>
-                    <div>💾 項目: ${saveKeys.length}/${CONFIG.GAME_SAVE_KEYS.length}</div>
+                    <div>📊 解構後大小: ${sizeKB} KB</div>
+                    <div>💾 辨識項目: ${saveKeys.length}/${CONFIG.GAME_SAVE_KEYS.length}</div>
                 </div>
             `;
             
             if (saveKeys.length === 0) {
-                validationHTML += `<div style="margin-top: 8px; color: var(--warning);">⚠️ 未檢測到遊戲存檔</div>`;
+                validationHTML += `<div style="margin-top: 8px; color: var(--warning);">⚠️ 提醒：該 JSON 為特殊/自訂格式，進入遊戲時將嘗試強制寫入</div>`;
             }
             
             showValidation(validationHTML);
         } catch(e) {
             console.error('[validateData] 驗證失敗:', e);
-            showValidation(`<span class="status-error">❌ 解析失敗: ${e.message}<br>💡 打開 F12 Console 查看詳細日誌</span>`);
+            showValidation(`<span class="status-error">❌ JSON 結構不完整: ${e.message}</span>`);
         }
     }
 
-    // 從遊戲導出
     function exportFromGame() {
-        showStatus('💡 此按鈕需要在遊戲內使用（有存檔時）<br>建議: 進入遊戲後重新整理此頁面，會顯示「已找到 X 項遊戲資料」', 'info');
+        showStatus('💡 此按鈕需要在遊戲內使用（有存檔時）<br>建議: 進入遊戲後點擊「備份存檔」→「導出 JSON」', 'info');
     }
 
-    // 讀取檔案
     function handleFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -313,7 +284,7 @@
                 const content = ev.target.result;
                 document.getElementById('save-json-textarea').value = content;
                 showStatus('✅ 檔案讀取成功！', 'success');
-                setTimeout(() => validateData(), 500);
+                setTimeout(() => validateData(), 300);
             } catch(e) {
                 showStatus(`❌ 檔案讀取失敗: ${e.message}`, 'error');
             }
@@ -321,7 +292,6 @@
         reader.readAsText(file);
     }
 
-    // 透過 URL 注入進入遊戲
     function launchGameWithURL() {
         const dataStr = document.getElementById('save-json-textarea').value.trim();
         
@@ -331,66 +301,41 @@
         }
 
         try {
-            console.log('[launchGameWithURL] 開始進入遊戲');
             let data = dataStr;
 
-            // 解析 SIG1 格式
             if (dataStr.startsWith('SIG1:')) {
-                console.log('[launchGameWithURL] 偵測到 SIG1 格式，開始解析');
                 const decoded = parseSIG1(dataStr);
-                if (!decoded) {
-                    throw new Error('SIG1 解析失敗');
-                }
+                if (!decoded) throw new Error('SIG1 解析失敗，請檢查資料字串');
                 data = decoded;
-                console.log('[launchGameWithURL] SIG1 解析成功');
             }
 
-            // 驗證 JSON
-            console.log('[launchGameWithURL] 驗證 JSON');
+            // 驗證是否為合法 JSON
             JSON.parse(data);
-            console.log('[launchGameWithURL] JSON 驗證成功');
 
             const serverKey = document.getElementById('server-select').value;
             const baseUrl = CONFIG.SERVER_URLS[serverKey];
             
-            // 把資料編碼成 URL 參數
+            // 寫入 localStorage 做全域載荷備份
+            localStorage.setItem('PRELOAD_INJECT_SAVE', data);
+
             const encoded = encodeURIComponent(data);
-            
-            // 檢查 URL 長度
             const finalUrl = baseUrl + '#inject_save=' + encoded;
-            console.log('[launchGameWithURL] 最終 URL 長度:', finalUrl.length);
 
-            if (finalUrl.length > 8000) {
-                showStatus('⚠️ 存檔資料過大（URL 長度 ' + finalUrl.length + ' 字）<br>建議使用「清空舊資料後進入」，手動在遊戲內匯入', 'warning');
-                return;
-            }
-
-            showStatus('⏳ 正在進入遊戲...', 'info');
-            console.log('[launchGameWithURL] 即將跳轉到:', baseUrl);
+            showStatus('⏳ 正在注入存檔並啟動遊戲...', 'info');
             
-            // 進入遊戲
             setTimeout(() => {
                 window.location.href = finalUrl;
-            }, 500);
+            }, 400);
             
         } catch(e) {
             console.error('[launchGameWithURL] 錯誤:', e);
-            showStatus(`❌ 錯誤: ${e.message}`, 'error');
+            showStatus(`❌ 注入失敗: ${e.message}`, 'error');
         }
     }
 
-    // 清空後進入
     function clearBeforeLaunch() {
-        const dataStr = document.getElementById('save-json-textarea').value.trim();
-        
-        if (!dataStr) {
-            showStatus('⚠️ 請先輸入存檔資料', 'warning');
-            return;
-        }
-
-        if (confirm('⚠️ 進入遊戲前會清空現有資料，確定要繼續嗎？')) {
+        if (confirm('⚠️ 進入遊戲前會清空本機舊資料，確定要繼續嗎？')) {
             try {
-                // 清空遊戲資料
                 CONFIG.GAME_SAVE_KEYS.forEach(key => {
                     localStorage.removeItem(key);
                 });
@@ -398,20 +343,16 @@
                 const serverKey = document.getElementById('server-select').value;
                 const baseUrl = CONFIG.SERVER_URLS[serverKey];
                 
-                // 清空後進入遊戲
                 showStatus('✅ 已清空舊資料，正在進入遊戲...', 'success');
-                
                 setTimeout(() => {
                     window.location.href = baseUrl;
-                }, 500);
-                
+                }, 400);
             } catch(e) {
                 showStatus(`❌ 錯誤: ${e.message}`, 'error');
             }
         }
     }
 
-    // 頁面載入
     window.addEventListener('load', () => {
         const existingData = {};
         CONFIG.GAME_SAVE_KEYS.forEach(key => {
@@ -420,7 +361,7 @@
         });
 
         if (Object.keys(existingData).length > 0) {
-            showStatus(`📂 偵測到 ${Object.keys(existingData).length} 項遊戲資料<br>💡 若要導出，請在遊戲內點擊「備份存檔」→「導出 JSON」`, 'info');
+            showStatus(`📂 本機偵測到 ${Object.keys(existingData).length} 項舊遊戲資料`, 'info');
         }
     });
 </script>
