@@ -70,7 +70,7 @@
             font-size: 0.95rem;
         }
 
-        .custom-plugin-box {
+        .custom-box {
             background-color: #262626;
             border: 1px dashed var(--accent-color);
             padding: 12px;
@@ -96,12 +96,35 @@
             font-weight: bold;
             cursor: pointer;
             transition: background 0.2s ease;
-            margin-top: 10px;
+            margin-top: 15px;
         }
 
         .btn-launch:hover {
             background-color: #d35400;
             color: #fff;
+        }
+
+        .btn-action {
+            width: 48%;
+            padding: 10px;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid var(--accent-color);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-action:hover {
+            background-color: var(--accent-color);
+            color: #000;
+        }
+
+        .btn-group {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
         }
 
         .clear-btn {
@@ -131,8 +154,18 @@
         </select>
     </div>
 
+    <!-- 遊戲進度 匯出/匯入 功能區域 -->
+    <div class="form-group custom-box">
+        <label>💾 遊戲進度備份與還原：</label>
+        <div class="btn-group">
+            <button class="btn-action" onclick="exportSaveData()">📤 匯出進度檔</button>
+            <button class="btn-action" onclick="document.getElementById('import-save-file').click()">📥 匯入進度檔</button>
+        </div>
+        <input type="file" id="import-save-file" accept=".json" style="display: none;" onchange="importSaveData(event)">
+    </div>
+
     <!-- 玩家自訂本地外掛 -->
-    <div class="form-group custom-plugin-box">
+    <div class="form-group custom-box">
         <label for="plugin-file">🧩 自訂本地外掛檔案（選填）：</label>
         <input type="file" id="plugin-file" accept=".js,.txt">
         <div id="plugin-status" class="status-text">未載入任何自訂腳本</div>
@@ -144,17 +177,32 @@
 </div>
 
 <script>
-    // 0. 強制防快取跳轉機制（確保 App 每次開啟都是最新的介面）
+    const CURRENT_APK_VERSION = "1.2.0"; // 當前 APK 版本標籤
+
+    // 0. 防快取跳轉 & 檢查 APK 版本更新
     (function() {
         const urlParams = new URLSearchParams(window.location.search);
         if (!urlParams.has('v')) {
             const separator = window.location.href.includes('?') ? '&' : '?';
             const newUrl = window.location.href + separator + 'v=' + Date.now();
             window.location.replace(newUrl);
+            return;
         }
+
+        // 自動向 GitHub 抓取最新版本號資訊
+        fetch('https://0047946-ops.github.io/game-launcher/version.json?t=' + Date.now())
+            .then(res => res.json())
+            .then(data => {
+                if (data.latestVersion && data.latestVersion !== CURRENT_APK_VERSION) {
+                    if (confirm(`🎉 發現新版 APK (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即前往下載最新版？`)) {
+                        window.location.href = data.downloadUrl;
+                    }
+                }
+            })
+            .catch(() => {});
     })();
 
-    // 1. 初始化檢查 LocalStorage 是否有記憶的自訂外掛
+    // 1. 初始化檢查 LocalStorage 自訂外掛
     window.addEventListener('DOMContentLoaded', () => {
         const savedPlugin = localStorage.getItem('custom_plugin_code');
         const savedFileName = localStorage.getItem('custom_plugin_name');
@@ -165,7 +213,47 @@
         }
     });
 
-    // 2. 監聽玩家上傳本地 `.js` 檔案
+    // 2. 匯出進度 (Export Save Data)
+    function exportSaveData() {
+        const saveData = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            // 排除啟動器自身的設定檔
+            if (key !== 'custom_plugin_code' && key !== 'custom_plugin_name') {
+                saveData[key] = localStorage.getItem(key);
+            }
+        }
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `idle_lineage_save_${Date.now()}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        alert('進度檔案已成功匯出！');
+    }
+
+    // 3. 匯入進度 (Import Save Data)
+    function importSaveData(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const saveData = JSON.parse(e.target.result);
+                    Object.keys(saveData).forEach(key => {
+                        localStorage.setItem(key, saveData[key]);
+                    });
+                    alert('進度檔已成功匯入！啟動遊戲即可生效。');
+                } catch (err) {
+                    alert('匯入失敗：無效的進度備份檔案！');
+                }
+            };
+            reader.readAsText(file);
+        }
+    }
+
+    // 4. 監聽玩家上傳本地外掛 (.js)
     document.getElementById('plugin-file').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
@@ -184,7 +272,7 @@
         }
     });
 
-    // 3. 清除自訂外掛
+    // 5. 清除自訂外掛
     function clearCustomPlugin() {
         localStorage.removeItem('custom_plugin_code');
         localStorage.removeItem('custom_plugin_name');
@@ -195,11 +283,11 @@
         alert('已清除自訂外掛設定！');
     }
 
-    // 4. 核心遊戲啟動與外掛注入邏輯
+    // 6. 核心遊戲啟動與外掛注入邏輯
     function launchGame() {
         const targetUrl = document.getElementById('server-select').value;
 
-        // 如果是選擇「純淨模式」，直接進行跳轉不注入任何外掛
+        // 純淨模式跳轉
         if (targetUrl.includes('mode=clean')) {
             window.location.href = targetUrl;
             return;
