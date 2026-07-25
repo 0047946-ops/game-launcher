@@ -14,33 +14,34 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:usesCleartextTraffic="true">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
-            
-            <!-- 原有啟動器入口 -->
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 1. 解決「不打開支援連結」：註冊網址 Deep Link -->
+            <!-- 1. 支援雙遊戲網址的 Deep Links (讓系統自動用此 APK 開啟網址) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.category.DEFAULT" />
-                <category android:name="android.category.BROWSABLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="http" />
                 <data android:scheme="https" />
+                <!-- 網址一：shines871 -->
                 <data android:host="shines871.github.io" />
+                <!-- 網址二：pp771007 -->
                 <data android:host="pp771007.github.io" />
             </intent-filter>
 
-            <!-- 2. 註冊成 .json 與 .txt 檔案的預設開啟應用程式 -->
+            <!-- 2. 支援外部點擊 .json 檔案時自動打開本 APK -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/json" />
                 <data android:mimeType="text/plain" />
                 <data android:scheme="file" />
