@@ -55,21 +55,21 @@
 
 <div class="card">
     <h2>⚡ 放置天堂 - 極速門戶</h2>
-    <div class="sub-title">📱 原生橋接模式已啟用 | 檔案雙向同步無感轉移</div>
+    <div class="sub-title">📱 雙網址 & 雙外掛自動同步模式已啟用</div>
 
-    <!-- 伺服器選擇 -->
+    <!-- 雙遊戲網址選擇 -->
     <div class="box">
-        <label class="label">🌐 選擇目標伺服器</label>
+        <label class="label">🌐 選擇目標遊戲網址 (伺服器)</label>
         <select id="server">
-            <option value="pp771007">伺服器二 (pp771007 - 雙外掛全功能)</option>
-            <option value="shines871">伺服器一 (shines871 - 離線增強)</option>
+            <option value="pp771007">網址二：pp771007.github.io (全功能門戶)</option>
+            <option value="shines871">網址一：shines871.github.io (離線增強版)</option>
         </select>
         <button class="btn btn-direct" onclick="directPlay()">🎮 免存檔直接進入遊戲</button>
     </div>
 
-    <!-- JSON 檔案處理 -->
+    <!-- JSON 檔案處理與同步 -->
     <div class="box">
-        <label class="label">📂 JSON 存檔極速處理</label>
+        <label class="label">📂 JSON 人物資料極速處理</label>
         
         <input type="file" id="fileInput" accept=".json,.txt" style="display:none;" onchange="handleFileSelect(event)">
         
@@ -77,17 +77,18 @@
         <button class="btn btn-sync" onclick="exportCurrentSave()">📤 一鍵匯出本機進度 JSON 檔</button>
     </div>
 
-    <!-- 剪貼簿一鍵感應 -->
+    <!-- 剪貼簿感應 -->
     <div class="box">
         <label class="label">📋 快貼模式</label>
         <button class="btn" style="background:#a8ff78; color:#000;" onclick="readFromClipboard()">⚡ 自動讀取手機剪貼簿並登入</button>
     </div>
 
-    <!-- 🔥 玩家添加自訂外掛腳本區 -->
+    <!-- 🔥 雙外掛腳本網址配置區 -->
     <div class="box">
-        <label class="label">🧩 玩家自訂第三方外掛腳本 URL</label>
-        <input type="text" id="pluginUrlInput" placeholder="請輸入外掛 JS 網址 (https://...)">
-        <button class="btn btn-plugin" onclick="saveCustomPlugin()">💾 儲存並啟用自訂外掛腳本</button>
+        <label class="label">🧩 雙外掛腳本 URL 配置</label>
+        <input type="text" id="pluginUrl1" placeholder="外掛腳本 1 (例如：https://.../plugin1.js)">
+        <input type="text" id="pluginUrl2" placeholder="外掛腳本 2 (例如：https://.../plugin2.js)">
+        <button class="btn btn-plugin" onclick="saveCustomPlugins()">💾 儲存雙外掛腳本網址</button>
     </div>
 
     <div id="msg" class="status" style="display:none;"></div>
@@ -100,11 +101,12 @@
     };
 
     window.onload = function() {
-        // 初始化讀取自訂外掛網址
-        if (window.AndroidBridge && window.AndroidBridge.getCustomPluginUrl) {
-            const currentUrl = window.AndroidBridge.getCustomPluginUrl();
-            if (currentUrl) {
-                document.getElementById('pluginUrlInput').value = currentUrl;
+        if (window.AndroidBridge) {
+            if (window.AndroidBridge.getCustomPluginUrl1) {
+                document.getElementById('pluginUrl1').value = window.AndroidBridge.getCustomPluginUrl1();
+            }
+            if (window.AndroidBridge.getCustomPluginUrl2) {
+                document.getElementById('pluginUrl2').value = window.AndroidBridge.getCustomPluginUrl2();
             }
         }
     };
@@ -116,14 +118,12 @@
         el.innerHTML = txt;
     }
 
-    // 1. 免存檔直接開啟
     function directPlay() {
         const url = SERVERS[document.getElementById('server').value];
         log('⚡ 正在載入遊戲創角選單...', 'success');
         setTimeout(() => { window.location.href = url + '#action=create'; }, 300);
     }
 
-    // 2. 處理玩家選取 .json 檔案
     function handleFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -140,7 +140,6 @@
         reader.readAsText(file);
     }
 
-    // 3. 一鍵匯出存檔至 Download 資料夾
     function exportCurrentSave() {
         let save = localStorage.getItem('RAW_INJECT_SAVE_DATA');
         if (!save && window.AndroidBridge && window.AndroidBridge.loadGameData) {
@@ -160,7 +159,6 @@
         }
     }
 
-    // 4. 自動讀取剪貼簿
     function readFromClipboard() {
         if (window.AndroidBridge && window.AndroidBridge.getClipboardText) {
             const clipText = window.AndroidBridge.getClipboardText();
@@ -174,22 +172,18 @@
         }
     }
 
-    // 5. 儲存自訂外掛網址
-    function saveCustomPlugin() {
-        const url = document.getElementById('pluginUrlInput').value.trim();
-        if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
-            return log('⚠️ 請輸入以 http:// 或 https:// 開頭的完整外掛網址！', 'error');
-        }
+    function saveCustomPlugins() {
+        const u1 = document.getElementById('pluginUrl1').value.trim();
+        const u2 = document.getElementById('pluginUrl2').value.trim();
 
-        if (window.AndroidBridge && window.AndroidBridge.saveCustomPluginUrl) {
-            window.AndroidBridge.saveCustomPluginUrl(url);
-            log(url ? '✅ 自訂外掛網址已儲存！進入遊戲時將自動載入。' : '✅ 已清除自訂外掛網址！', 'success');
+        if (window.AndroidBridge && window.AndroidBridge.saveCustomPluginUrls) {
+            window.AndroidBridge.saveCustomPluginUrls(u1, u2);
+            log('✅ 雙外掛腳本網址已成功更新儲存！', 'success');
         } else {
             log('⚠️ 未偵測到原生 Android 橋樑', 'error');
         }
     }
 
-    // 統一注入並跳轉
     function saveAndLaunch(saveData, successMsg) {
         localStorage.setItem('RAW_INJECT_SAVE_DATA', saveData);
         
