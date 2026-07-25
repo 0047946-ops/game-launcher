@@ -3,201 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - 極速同步啟動門戶</title>
+    <title>放置天堂 - 極速門戶</title>
     <style>
-        :root {
-            --bg: #0b0c10; --card: #1f2833; --accent: #66fcf1; --text: #c5c6c7;
-            --success: #00ff41; --error: #ff6b6b; --warning: #ffa500;
-        }
-        body { 
-            margin:0; padding:12px; background:var(--bg); color:var(--text); 
-            font-family:-apple-system, BlinkMacSystemFont, sans-serif;
-            display:flex; justify-content:center; align-items:center; min-height:100vh;
-            box-sizing:border-box;
-        }
-        .card { 
-            width:100%; max-width:480px; background:var(--card); 
-            border:1px solid var(--accent); border-radius:16px; padding:20px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.9); box-sizing:border-box;
-        }
-        h2 { text-align:center; color:var(--accent); margin:0 0 10px 0; font-size: 1.35rem; font-weight:900; }
-        .sub-title { text-align:center; font-size:0.75rem; color:var(--warning); margin-bottom:16px; font-weight:bold; }
-        
-        .box {
-            background:#0b0c10; border:1px dashed var(--accent); border-radius:10px;
-            padding:14px; margin-bottom:14px;
-        }
-        .label { display:block; font-size:0.85rem; font-weight:bold; color:var(--accent); margin-bottom:6px; }
-        
-        .btn {
-            width:100%; padding:14px; margin:6px 0; border:none; border-radius:10px;
-            font-size:0.95rem; font-weight:900; cursor:pointer; transition:all 0.2s;
-            box-sizing:border-box; text-align:center;
-        }
-        .btn-direct { background:linear-gradient(135deg, #00ff41, #00b32d); color:#000; }
-        .btn-file { background:linear-gradient(135deg, #ffa500, #ff7c00); color:#000; }
-        .btn-sync { background:linear-gradient(135deg, #66fcf1, #45a29e); color:#0b0c10; }
-        .btn-plugin { background:linear-gradient(135deg, #e0c3fc, #8ec5fc); color:#000; }
-
-        select, input[type="text"] {
-            width:100%; padding:12px; background:#1f2833; color:#fff;
-            border:1px solid var(--accent); border-radius:8px; font-size:0.85rem;
-            box-sizing:border-box; margin-bottom:8px;
-        }
-        
-        .status {
-            margin-top:10px; padding:10px; background:rgba(0,0,0,0.6); 
-            border-radius:8px; font-size:0.8rem; word-break:break-all; line-height:1.4;
-        }
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: linear-gradient(180deg, #0f172a, #1e2937); color: #e2e8f0; margin:0; padding:0; }
+        .container { max-width: 520px; margin: 0 auto; padding: 20px 15px; }
+        h1 { color: #67e8f9; text-align: center; margin: 10px 0 5px; }
+        .subtitle { text-align: center; color: #a5b4fc; margin-bottom: 20px; }
+        select, input, button { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; font-size: 16px; border: none; }
+        button { font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-green { background: #22c55e; color: #000; }
+        .btn-blue { background: #3b82f6; color: white; }
+        .btn-orange { background: #f59e0b; color: white; }
+        .btn-purple { background: #8b5cf6; color: white; }
+        .section { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 16px; margin: 15px 0; }
+        .status { padding: 12px; border-radius: 10px; text-align: center; margin: 10px 0; background: rgba(165,180,252,0.1); }
     </style>
 </head>
 <body>
+<div class="container">
+    <h1>⚡ 放置天堂 - 極速門戶</h1>
+    <p class="subtitle">雙網址 & 雙外掛自動同步模式</p>
 
-<div class="card">
-    <h2>⚡ 放置天堂 - 極速門戶</h2>
-    <div class="sub-title">📱 雙網址 & 雙外掛自動同步模式已啟用</div>
+    <div class="status" id="status">準備就緒，請選擇伺服器</div>
 
-    <!-- 雙遊戲網址選擇 -->
-    <div class="box">
-        <label class="label">🌐 選擇目標遊戲網址 (伺服器)</label>
+    <!-- 伺服器選擇 -->
+    <div class="section">
+        <strong>🎯 選擇目標遊戲網址</strong>
         <select id="server">
-            <option value="pp771007">網址二：pp771007.github.io (全功能門戶)</option>
-            <option value="shines871">網址一：shines871.github.io (離線增強版)</option>
+            <option value="https://pp771007.github.io/idle-lineage-class/">pp771007.github.io (推薦 - 全功能加掛版)</option>
+            <option value="https://shines871.github.io/idle-lineage-class/">shines871.github.io (原版)</option>
         </select>
-        <button class="btn btn-direct" onclick="directPlay()">🎮 免存檔直接進入遊戲</button>
     </div>
 
-    <!-- JSON 檔案處理與同步 -->
-    <div class="box">
-        <label class="label">📂 JSON 人物資料極速處理</label>
-        
-        <input type="file" id="fileInput" accept=".json,.txt" style="display:none;" onchange="handleFileSelect(event)">
-        
-        <button class="btn btn-file" onclick="document.getElementById('fileInput').click()">📂 選擇手機中的 .json 檔匯入登入</button>
-        <button class="btn btn-sync" onclick="exportCurrentSave()">📤 一鍵匯出本機進度 JSON 檔</button>
+    <button class="btn-green" onclick="launchGame()">🚀 免存檔直接進入遊戲</button>
+
+    <!-- JSON 處理 -->
+    <div class="section">
+        <strong>📦 JSON 人物資料極速處理</strong>
+        <button class="btn-orange" onclick="importJSON()">📂 選擇 .json 檔匯入</button>
+        <button class="btn-blue" onclick="exportJSON()">💾 一鍵匯出目前進度</button>
     </div>
 
-    <!-- 剪貼簿感應 -->
-    <div class="box">
-        <label class="label">📋 快貼模式</label>
-        <button class="btn" style="background:#a8ff78; color:#000;" onclick="readFromClipboard()">⚡ 自動讀取手機剪貼簿並登入</button>
+    <!-- 快貼模式 -->
+    <div class="section">
+        <strong>⚡ 快貼模式</strong>
+        <button class="btn-green" onclick="pasteAndLoad()">📋 自動讀取剪貼簿並登入</button>
     </div>
 
-    <!-- 🔥 雙外掛腳本網址配置區 -->
-    <div class="box">
-        <label class="label">🧩 雙外掛腳本 URL 配置</label>
-        <input type="text" id="pluginUrl1" placeholder="外掛腳本 1 (例如：https://.../plugin1.js)">
-        <input type="text" id="pluginUrl2" placeholder="外掛腳本 2 (例如：https://.../plugin2.js)">
-        <button class="btn btn-plugin" onclick="saveCustomPlugins()">💾 儲存雙外掛腳本網址</button>
+    <!-- 外掛配置 -->
+    <div class="section">
+        <strong>🔧 雙外掛腳本 URL 配置</strong>
+        <input type="text" id="plugin1" placeholder="外掛腳本 1 (主外掛)" value="https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js">
+        <input type="text" id="plugin2" placeholder="外掛腳本 2 (GM商店或其他)" value="https://kid0924.github.io/idle-lineage-class/klh_GMShop.js">
+        <button class="btn-purple" onclick="savePlugins()">💾 儲存外掛設定</button>
     </div>
 
-    <div id="msg" class="status" style="display:none;"></div>
-</div>
-
-<script>
-    const SERVERS = {
-        'shines871': 'https://shines871.github.io/idle-lineage-class/',
-        'pp771007': 'https://pp771007.github.io/idle-lineage-class/'
-    };
-
-    window.onload = function() {
-        if (window.AndroidBridge) {
-            if (window.AndroidBridge.getCustomPluginUrl1) {
-                document.getElementById('pluginUrl1').value = window.AndroidBridge.getCustomPluginUrl1();
-            }
-            if (window.AndroidBridge.getCustomPluginUrl2) {
-                document.getElementById('pluginUrl2').value = window.AndroidBridge.getCustomPluginUrl2();
-            }
+    <script>
+        // 儲存外掛設定
+        function savePlugins() {
+            localStorage.setItem('customPlugin1', document.getElementById('plugin1').value);
+            localStorage.setItem('customPlugin2', document.getElementById('plugin2').value);
+            alert('✅ 外掛設定已儲存！下次進入遊戲將自動注入');
         }
-    };
 
-    function log(txt, type = 'info') {
-        const el = document.getElementById('msg');
-        el.style.display = 'block';
-        el.style.color = type === 'error' ? '#ff6b6b' : (type === 'success' ? '#00ff41' : '#66fcf1');
-        el.innerHTML = txt;
-    }
+        function setStatus(msg, color = "#a5b4fc") {
+            document.getElementById("status").innerHTML = msg;
+            document.getElementById("status").style.color = color;
+        }
 
-    function directPlay() {
-        const url = SERVERS[document.getElementById('server').value];
-        log('⚡ 正在載入遊戲創角選單...', 'success');
-        setTimeout(() => { window.location.href = url + '#action=create'; }, 300);
-    }
+        // 進入遊戲
+        function launchGame() {
+            const url = document.getElementById("server").value;
+            setStatus("🚀 進入遊戲中...", "#67e8f9");
+            window.location.href = url;
+        }
 
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+        // JSON 匯入
+        function importJSON() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    try {
+                        const data = JSON.parse(ev.target.result);
+                        localStorage.clear();
+                        Object.keys(data).forEach(key => {
+                            localStorage.setItem(key, typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key]);
+                        });
+                        setStatus("✅ 匯入成功！正在重新載入遊戲...", "#22c55e");
+                        setTimeout(() => window.location.reload(), 1500);
+                    } catch (err) {
+                        setStatus("❌ JSON 格式錯誤", "#ef4444");
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
 
-        const reader = new FileReader();
-        reader.onload = function(ev) {
+        // JSON 匯出
+        function exportJSON() {
+            const saveData = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key) saveData[key] = localStorage.getItem(key);
+            }
+            if (Object.keys(saveData).length === 0) {
+                alert("❌ 目前沒有找到存檔資料");
+                return;
+            }
+            const blob = new Blob([JSON.stringify(saveData, null, 2)], {type: "application/json"});
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `放置天堂_存檔_${new Date().toISOString().slice(0,16).replace(/[:T]/g, '-')}.json`;
+            a.click();
+            setStatus("✅ 存檔已成功下載！", "#22c55e");
+        }
+
+        // 剪貼簿快貼
+        async function pasteAndLoad() {
             try {
-                const content = ev.target.result.trim();
-                saveAndLaunch(content, `檔案「${file.name}」載入成功！`);
-            } catch (err) {
-                log('❌ 檔案解析失敗，請確定是否為合法 JSON 存檔！', 'error');
+                const text = await navigator.clipboard.readText();
+                const data = JSON.parse(text);
+                localStorage.clear();
+                Object.keys(data).forEach(key => {
+                    localStorage.setItem(key, typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key]);
+                });
+                setStatus("✅ 剪貼簿匯入成功！重新載入中...", "#22c55e");
+                setTimeout(() => window.location.reload(), 1200);
+            } catch (e) {
+                alert("❌ 剪貼簿內容不是有效存檔，或無法讀取剪貼簿");
             }
+        }
+
+        // 頁面載入
+        window.onload = () => {
+            setStatus("✅ 極速門戶已就緒<br>推薦使用 pp771007 加掛版", "#67e8f9");
+            
+            // 載入已儲存的外掛設定
+            const p1 = localStorage.getItem('customPlugin1');
+            const p2 = localStorage.getItem('customPlugin2');
+            if (p1) document.getElementById('plugin1').value = p1;
+            if (p2) document.getElementById('plugin2').value = p2;
         };
-        reader.readAsText(file);
-    }
-
-    function exportCurrentSave() {
-        let save = localStorage.getItem('RAW_INJECT_SAVE_DATA');
-        if (!save && window.AndroidBridge && window.AndroidBridge.loadGameData) {
-            save = window.AndroidBridge.loadGameData();
-        }
-
-        if (!save) {
-            return log('⚠️ 目前本機沒有角色存檔資料！', 'error');
-        }
-
-        if (window.AndroidBridge && window.AndroidBridge.saveBase64File) {
-            const base64 = btoa(unescape(encodeURIComponent(save)));
-            window.AndroidBridge.saveBase64File(base64, `fable5_save_${Date.now()}.json`);
-            log('✅ 存檔已指令匯出，請至手機 Download 資料夾查看！', 'success');
-        } else {
-            log('⚠️ 未偵測到原生 Android 橋樑', 'error');
-        }
-    }
-
-    function readFromClipboard() {
-        if (window.AndroidBridge && window.AndroidBridge.getClipboardText) {
-            const clipText = window.AndroidBridge.getClipboardText();
-            if (clipText && clipText.length > 10) {
-                saveAndLaunch(clipText, '✅ 成功從手機剪貼簿讀取存檔！');
-            } else {
-                log('⚠️ 手機剪貼簿中沒有找到有效的存檔內容！', 'error');
-            }
-        } else {
-            log('⚠️ 剪貼簿讀取未獲得權限或原生接口未開啟', 'error');
-        }
-    }
-
-    function saveCustomPlugins() {
-        const u1 = document.getElementById('pluginUrl1').value.trim();
-        const u2 = document.getElementById('pluginUrl2').value.trim();
-
-        if (window.AndroidBridge && window.AndroidBridge.saveCustomPluginUrls) {
-            window.AndroidBridge.saveCustomPluginUrls(u1, u2);
-            log('✅ 雙外掛腳本網址已成功更新儲存！', 'success');
-        } else {
-            log('⚠️ 未偵測到原生 Android 橋樑', 'error');
-        }
-    }
-
-    function saveAndLaunch(saveData, successMsg) {
-        localStorage.setItem('RAW_INJECT_SAVE_DATA', saveData);
-        
-        if (window.AndroidBridge && window.AndroidBridge.saveGameData) {
-            window.AndroidBridge.saveGameData(saveData);
-        }
-
-        log(`${successMsg}<br>🚀 正在開啟遊戲...`, 'success');
-
-        setTimeout(() => {
-            const url = SERVERS[document.getElementById('server').value];
-            window.location.href = url + '#action=inject';
-        }, 400);
-    }
-</script>
+    </script>
+</div>
 </body>
 </html>
