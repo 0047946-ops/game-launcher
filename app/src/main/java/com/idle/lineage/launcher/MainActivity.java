@@ -2,8 +2,10 @@ package com.idle.lineage.launcher;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -25,6 +27,8 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private final static int FILE_CHOOSER_RESULT_CODE = 10001;
+    private static final String PREF_NAME = "IdleLineageSaveData";
+    private static final String KEY_SAVE_JSON = "player_save_json";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +64,7 @@ public class MainActivity extends Activity {
                             "  var reader=new FileReader();" +
                             "  reader.onloadend=function(){" +
                             "    var base64=reader.result.split(',')[1];" +
-                            "    AndroidBridge.saveBase64File(base64,'save.json');" +
+                            "    AndroidBridge.saveBase64File(base64,'fable5_save.json');" +
                             "  };" +
                             "  reader.readAsDataURL(xhr.response);" +
                             "};" +
@@ -87,6 +91,7 @@ public class MainActivity extends Activity {
             }
         });
 
+        // 綁定原生橋樑
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -135,7 +140,7 @@ public class MainActivity extends Activity {
                         "      var reader = new FileReader();" +
                         "      reader.onloadend = function(){" +
                         "        var base64 = reader.result.split(',')[1];" +
-                        "        var name = a.download || 'save.json';" +
+                        "        var name = a.download || 'fable5_save.json';" +
                         "        AndroidBridge.saveBase64File(base64, name);" +
                         "      };" +
                         "      reader.readAsDataURL(blob);" +
@@ -152,7 +157,7 @@ public class MainActivity extends Activity {
     }
 
     private String guessFileName(String contentDisposition, String url) {
-        String fileName = "download_" + System.currentTimeMillis();
+        String fileName = "fable5_save_" + System.currentTimeMillis() + ".json";
         try {
             if (contentDisposition != null && contentDisposition.contains("filename=")) {
                 fileName = contentDisposition.split("filename=")[1].replace("\"", "").trim();
@@ -165,6 +170,8 @@ public class MainActivity extends Activity {
     }
 
     public class AndroidBridge {
+
+        // 1. 匯出檔案到 Download 資料夾
         @JavascriptInterface
         public void saveBase64File(String base64Data, String fileName) {
             runOnUiThread(() -> {
@@ -177,12 +184,40 @@ public class MainActivity extends Activity {
                     fos.write(bytes);
                     fos.close();
                     Toast.makeText(MainActivity.this,
-                            "已匯出：" + outFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+                            "✅ 存檔已成功匯出至 Download：" + fileName, Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this,
-                            "匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                            "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
+        }
+
+        // 2. 原生私有空間：一鍵保存角色資料 JSON
+        @JavascriptInterface
+        public void saveGameData(String jsonText) {
+            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            sp.edit().putString(KEY_SAVE_JSON, jsonText).apply();
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "✅ 角色進度已成功同步至手機原生儲存區！", Toast.LENGTH_SHORT).show());
+        }
+
+        // 3. 原生私有空間：一鍵讀取角色資料 JSON
+        @JavascriptInterface
+        public String loadGameData() {
+            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            return sp.getString(KEY_SAVE_JSON, "");
+        }
+
+        // 4. 一鍵取得手機剪貼簿內容（輔助極速讀檔）
+        @JavascriptInterface
+        public String getClipboardText() {
+            try {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null && clipboard.hasPrimaryClip() && clipboard.getPrimaryClip().getItemCount() > 0) {
+                    CharSequence text = clipboard.getPrimaryClip().getItemAt(0).getText();
+                    return text != null ? text.toString() : "";
+                }
+            } catch (Exception ignored) {}
+            return "";
         }
     }
 
