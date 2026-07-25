@@ -160,14 +160,28 @@
         <label>💾 遊戲進度備份與還原：</label>
         <div class="btn-group">
             <button class="btn-action" onclick="exportSaveData()">📤 匯出進度檔</button>
-            <button class="btn-action" onclick="document.getElementById('import-save-file').click()">📥 匯入進度檔</button>
+            <button class="btn-action" onclick="toggleImportArea()">📥 貼上匯入文字</button>
         </div>
-        <input type="file" id="import-save-file" accept=".json" style="display: none;" onchange="importSaveData(event)">
         
-        <!-- 備份文字顯示框（破解 App 無法下載檔案的備用機制） -->
+        <!-- 檔案選擇器（備用） -->
+        <input type="file" id="import-save-file" accept=".json" style="display: none;" onchange="importSaveDataFromFile(event)">
+
+        <!-- 匯出存檔文字顯示框 -->
         <div id="export-text-container" style="display:none; margin-top:10px;">
-            <label style="font-size:0.8rem; color:#f39c12;">📋 存檔碼 (已自動複製到剪貼簿)：</label>
+            <label style="font-size:0.8rem; color:#f39c12;">📋 導出的存檔碼 (已自動複製)：</label>
             <textarea id="export-textarea" rows="3" readonly style="font-size:0.75rem;"></textarea>
+        </div>
+
+        <!-- 匯入存檔文字貼上框 -->
+        <div id="import-text-container" style="display:none; margin-top:10px;">
+            <label style="font-size:0.8rem; color:#2ecc71;">📥 請在此處貼上您的存檔碼：</label>
+            <textarea id="import-textarea" rows="3" placeholder="請在此貼上 JSON 存檔文字..." style="font-size:0.75rem;"></textarea>
+            <div class="btn-group" style="margin-top:6px;">
+                <button class="btn-action" style="width:100%; background-color:#27ae60;" onclick="importSaveDataFromText()">✅ 確認導入存檔</button>
+            </div>
+            <div style="text-align:right; margin-top:4px;">
+                <button class="clear-btn" style="color:#aaa;" onclick="document.getElementById('import-save-file').click()">改用選擇檔案匯入 (.json)</button>
+            </div>
         </div>
     </div>
 
@@ -220,7 +234,7 @@
         }
     });
 
-    // 2. 萬能匯出進度 (修復 Android App 無法觸發下載問題)
+    // 2. 萬能匯出進度
     function exportSaveData() {
         const saveData = {};
         for (let i = 0; i < localStorage.length; i++) {
@@ -232,7 +246,8 @@
         
         const jsonString = JSON.stringify(saveData);
 
-        // 機制 A：嘗試複製到剪貼簿並顯示在畫面框內（APK WebView 最穩定做法）
+        // 隱藏匯入框，顯示匯出框
+        document.getElementById('import-text-container').style.display = 'none';
         const textArea = document.getElementById('export-textarea');
         const container = document.getElementById('export-text-container');
         textArea.value = jsonString;
@@ -242,7 +257,6 @@
             navigator.clipboard.writeText(jsonString);
         }
 
-        // 機制 B：嘗試觸發檔案下載（適用於傳統瀏覽器）
         try {
             const blob = new Blob([jsonString], { type: "application/json" });
             const url = URL.createObjectURL(blob);
@@ -260,8 +274,40 @@
         alert('存檔已成功導出！\n\n若手機未跳出下載檔，存檔碼已自動複製到您的剪貼簿，並顯示在下方框內！');
     }
 
-    // 3. 匯入進度 (Import Save Data)
-    function importSaveData(event) {
+    // 3-1. 開啟/關閉 文字匯入框
+    function toggleImportArea() {
+        document.getElementById('export-text-container').style.display = 'none';
+        const container = document.getElementById('import-text-container');
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
+    // 3-2. 從文字輸入框進行匯入
+    function importSaveDataFromText() {
+        const textContent = document.getElementById('import-textarea').value.trim();
+        if (!textContent) {
+            alert('請先在文字框內貼上存檔內容！');
+            return;
+        }
+
+        try {
+            const saveData = JSON.parse(textContent);
+            Object.keys(saveData).forEach(key => {
+                localStorage.setItem(key, saveData[key]);
+            });
+            alert('進度已成功導入！啟動遊戲即可生效。');
+            document.getElementById('import-textarea').value = '';
+            document.getElementById('import-text-container').style.display = 'none';
+        } catch (err) {
+            alert('匯入失敗：無效的存檔文字格式！');
+        }
+    }
+
+    // 3-3. 從檔案選擇器匯入 (.json)
+    function importSaveDataFromFile(event) {
         const file = event.target.files[0];
         if (file) {
             const reader = new FileReader();
