@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 強效網頁防快取標籤（避免 App 讀取舊資料） -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -163,24 +162,18 @@
             <button class="btn-action" onclick="toggleImportArea()">📥 貼上匯入文字</button>
         </div>
         
-        <!-- 檔案選擇器（備用） -->
-        <input type="file" id="import-save-file" accept=".json" style="display: none;" onchange="importSaveDataFromFile(event)">
+        <input type="file" id="import-save-file" accept=".json,.txt" style="display: none;" onchange="importSaveDataFromFile(event)">
 
-        <!-- 匯出存檔文字顯示框 -->
         <div id="export-text-container" style="display:none; margin-top:10px;">
             <label style="font-size:0.8rem; color:#f39c12;">📋 導出的存檔碼 (已自動複製)：</label>
             <textarea id="export-textarea" rows="3" readonly style="font-size:0.75rem;"></textarea>
         </div>
 
-        <!-- 匯入存檔文字貼上框 -->
         <div id="import-text-container" style="display:none; margin-top:10px;">
-            <label style="font-size:0.8rem; color:#2ecc71;">📥 請在此處貼上您的存檔碼：</label>
-            <textarea id="import-textarea" rows="3" placeholder="請在此貼上 JSON 存檔文字..." style="font-size:0.75rem;"></textarea>
+            <label style="font-size:0.8rem; color:#2ecc71;">📥 請在此貼上存檔文字：</label>
+            <textarea id="import-textarea" rows="3" placeholder="請貼上存檔碼..." style="font-size:0.75rem;"></textarea>
             <div class="btn-group" style="margin-top:6px;">
-                <button class="btn-action" style="width:100%; background-color:#27ae60;" onclick="importSaveDataFromText()">✅ 確認導入存檔</button>
-            </div>
-            <div style="text-align:right; margin-top:4px;">
-                <button class="clear-btn" style="color:#aaa;" onclick="document.getElementById('import-save-file').click()">改用選擇檔案匯入 (.json)</button>
+                <button class="btn-action" style="width:100%; background-color:#27ae60;" onclick="saveImportTextToMemory()">✅ 暫存存檔並準備啟動</button>
             </div>
         </div>
     </div>
@@ -198,32 +191,19 @@
 </div>
 
 <script>
-    const CURRENT_APK_VERSION = "1.2.0"; // 當前 APK 版本標籤（與 version.json 對齊）
+    const CURRENT_APK_VERSION = "1.2.0";
 
-    // 0. 防快取跳轉 & 檢查 APK 版本更新
+    // 0. 防快取跳轉
     (function() {
         const urlParams = new URLSearchParams(window.location.search);
         if (!urlParams.has('v')) {
             const separator = window.location.href.includes('?') ? '&' : '?';
-            const newUrl = window.location.href + separator + 'v=' + Date.now();
-            window.location.replace(newUrl);
+            window.location.replace(window.location.href + separator + 'v=' + Date.now());
             return;
         }
-
-        // 自動向 GitHub 抓取最新版本號資訊
-        fetch('https://0047946-ops.github.io/game-launcher/version.json?t=' + Date.now())
-            .then(res => res.json())
-            .then(data => {
-                if (data.latestVersion && data.latestVersion !== CURRENT_APK_VERSION) {
-                    if (confirm(`🎉 發現新版 APK (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即前往下載最新版？`)) {
-                        window.location.href = data.downloadUrl;
-                    }
-                }
-            })
-            .catch(() => {});
     })();
 
-    // 1. 初始化檢查 LocalStorage 自訂外掛
+    // 1. 初始化檢查
     window.addEventListener('DOMContentLoaded', () => {
         const savedPlugin = localStorage.getItem('custom_plugin_code');
         const savedFileName = localStorage.getItem('custom_plugin_name');
@@ -234,118 +214,38 @@
         }
     });
 
-    // 2. 萬能匯出進度
+    // 2. 暫存匯入字串
+    function saveImportTextToMemory() {
+        const val = document.getElementById('import-textarea').value.trim();
+        if (!val) {
+            alert('請先輸入或貼上存檔碼！');
+            return;
+        }
+        localStorage.setItem('temp_import_data', val);
+        alert('存檔已成功暫存！點擊「🚀 啟動遊戲」即可自動注入角色。');
+    }
+
+    function toggleImportArea() {
+        document.getElementById('export-text-container').style.display = 'none';
+        const container = document.getElementById('import-text-container');
+        container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
+    }
+
     function exportSaveData() {
         const saveData = {};
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key !== 'custom_plugin_code' && key !== 'custom_plugin_name') {
+            if (key !== 'custom_plugin_code' && key !== 'custom_plugin_name' && key !== 'temp_import_data') {
                 saveData[key] = localStorage.getItem(key);
             }
         }
-        
         const jsonString = JSON.stringify(saveData);
-
-        // 隱藏匯入框，顯示匯出框
-        document.getElementById('import-text-container').style.display = 'none';
-        const textArea = document.getElementById('export-textarea');
-        const container = document.getElementById('export-text-container');
-        textArea.value = jsonString;
-        container.style.display = 'block';
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(jsonString);
-        }
-
-        try {
-            const blob = new Blob([jsonString], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `idle_lineage_save_${Date.now()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (e) {
-            console.log("APK 阻擋了自動下載，已轉為剪貼簿模式");
-        }
-
-        alert('存檔已成功導出！\n\n若手機未跳出下載檔，存檔碼已自動複製到您的剪貼簿，並顯示在下方框內！');
+        document.getElementById('export-textarea').value = jsonString;
+        document.getElementById('export-text-container').style.display = 'block';
+        if (navigator.clipboard) navigator.clipboard.writeText(jsonString);
+        alert('存檔已導出並複製到剪貼簿！');
     }
 
-    // 3-1. 開啟/關閉 文字匯入框
-    function toggleImportArea() {
-        document.getElementById('export-text-container').style.display = 'none';
-        const container = document.getElementById('import-text-container');
-        if (container.style.display === 'none' || container.style.display === '') {
-            container.style.display = 'block';
-        } else {
-            container.style.display = 'none';
-        }
-    }
-
-    // 3-2. 從文字輸入框進行匯入
-    function importSaveDataFromText() {
-        const textContent = document.getElementById('import-textarea').value.trim();
-        if (!textContent) {
-            alert('請先在文字框內貼上存檔內容！');
-            return;
-        }
-
-        try {
-            const saveData = JSON.parse(textContent);
-            Object.keys(saveData).forEach(key => {
-                localStorage.setItem(key, saveData[key]);
-            });
-            alert('進度已成功導入！啟動遊戲即可生效。');
-            document.getElementById('import-textarea').value = '';
-            document.getElementById('import-text-container').style.display = 'none';
-        } catch (err) {
-            alert('匯入失敗：無效的存檔文字格式！');
-        }
-    }
-
-    // 3-3. 從檔案選擇器匯入 (.json)
-    function importSaveDataFromFile(event) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const saveData = JSON.parse(e.target.result);
-                    Object.keys(saveData).forEach(key => {
-                        localStorage.setItem(key, saveData[key]);
-                    });
-                    alert('進度檔已成功匯入！啟動遊戲即可生效。');
-                } catch (err) {
-                    alert('匯入失敗：無效的進度備份檔案！');
-                }
-            };
-            reader.readAsText(file);
-        }
-    }
-
-    // 4. 監聽玩家上傳本地外掛 (.js)
-    document.getElementById('plugin-file').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const code = event.target.result;
-                localStorage.setItem('custom_plugin_code', code);
-                localStorage.setItem('custom_plugin_name', file.name);
-                
-                document.getElementById('plugin-status').innerText = `已成功載入：${file.name}`;
-                document.getElementById('plugin-status').style.color = '#2ecc71';
-                document.getElementById('clear-plugin').style.display = 'inline-block';
-                alert('自訂外掛檔案載入成功！啟動遊戲時將自動注入。');
-            };
-            reader.readAsText(file);
-        }
-    });
-
-    // 5. 清除自訂外掛
     function clearCustomPlugin() {
         localStorage.removeItem('custom_plugin_code');
         localStorage.removeItem('custom_plugin_name');
@@ -356,92 +256,19 @@
         alert('已清除自訂外掛設定！');
     }
 
-    // 6. 核心遊戲啟動與外掛注入邏輯
+    // 3. 啟動遊戲與自動解包注入
     function launchGame() {
         const targetUrl = document.getElementById('server-select').value;
+        const tempData = localStorage.getItem('temp_import_data');
 
-        // --- 注入遊戲內專屬導出工具腳本 ---
-        const sExporter = document.createElement('script');
-        sExporter.textContent = `
-            (function() {
-                window.addEventListener('load', function() {
-                    const btn = document.createElement('button');
-                    btn.innerHTML = '💾 存檔導出';
-                    btn.style.cssText = 'position:fixed; top:10px; right:10px; z-index:999999; background:#f39c12; color:#000; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.5); cursor:pointer;';
-                    btn.onclick = function() {
-                        if (confirm('【授權確認】\\n是否授權系統掃描並匯出當前人物與遊戲完整進度 (JSON)？')) {
-                            const data = {};
-                            for (let i = 0; i < localStorage.length; i++) {
-                                const k = localStorage.key(i);
-                                data[k] = localStorage.getItem(k);
-                            }
-                            const jsonStr = JSON.stringify(data, null, 2);
-                            
-                            // 複製到剪貼簿
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                                navigator.clipboard.writeText(jsonStr);
-                            }
-
-                            // 顯示導出視窗
-                            let modal = document.getElementById('export-modal');
-                            if (!modal) {
-                                modal = document.createElement('div');
-                                modal.id = 'export-modal';
-                                modal.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000000; background:#1e1e1e; border:2px solid #f39c12; padding:15px; border-radius:10px; width:85%; max-width:400px; color:#fff; box-shadow:0 0 20px rgba(0,0,0,0.8);';
-                                modal.innerHTML = '<h3 style="margin-top:0; color:#f39c12;">✅ 人物與遊戲存檔授權導出</h3><p style="font-size:12px; color:#aaa;">存檔內容已自動複製到剪貼簿，您亦可手動全選下方框內文字：</p><textarea id="modal-json" rows="8" style="width:100%; background:#111; color:#00ff00; border:1px solid #444; border-radius:5px; font-size:11px;"></textarea><button id="close-modal" style="width:100%; margin-top:10px; padding:8px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold;">關閉視窗</button>';
-                                document.body.appendChild(modal);
-                                document.getElementById('close-modal').onclick = function() { modal.style.display = 'none'; };
-                            }
-                            document.getElementById('modal-json').value = jsonStr;
-                            modal.style.display = 'block';
-                            alert('人物存檔已成功導出並複製到剪貼簿！');
-                        }
-                    };
-                    document.body.appendChild(btn);
-                });
-            })();
-        `;
-        document.head.appendChild(sExporter);
-
-        // 純淨模式跳轉
-        if (targetUrl.includes('mode=clean')) {
-            window.location.href = targetUrl;
-            return;
+        // 將存檔數據攜帶於 URL 參數跳轉，解決 file:// 與 https:// 跨域問題
+        let destination = targetUrl;
+        if (tempData) {
+            const sep = destination.includes('?') ? '&' : '?';
+            destination += sep + 'force_save=' + encodeURIComponent(tempData);
         }
 
-        // --- 1. 載入主外掛 ---
-        const s1 = document.createElement('script');
-        s1.src = 'https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';
-        document.head.appendChild(s1);
-
-        // --- 2. 延遲 0.5 秒載入 GM 商店 ---
-        setTimeout(() => {
-            const s2 = document.createElement('script');
-            s2.src = 'https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now();
-            document.head.appendChild(s2);
-        }, 500);
-
-        // --- 3. 限定 shines871 網域時載入離線掛機外掛 (offline.js) ---
-        if (targetUrl.includes('shines871.github.io')) {
-            setTimeout(() => {
-                const sOffline = document.createElement('script');
-                sOffline.src = 'https://pp771007.github.io/idle-lineage-class/offline.js?t=' + Date.now();
-                document.head.appendChild(sOffline);
-            }, 700);
-        }
-
-        // --- 4. 注入玩家自訂本地外掛 ---
-        const customCode = localStorage.getItem('custom_plugin_code');
-        if (customCode) {
-            setTimeout(() => {
-                const s3 = document.createElement('script');
-                s3.textContent = customCode;
-                document.head.appendChild(s3);
-            }, 1000);
-        }
-
-        // 完成外掛掛載後跳轉前往遊戲網頁
-        window.location.href = targetUrl;
+        window.location.href = destination;
     }
 </script>
 
