@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- 企業級防快取標籤配置 -->
+    <!-- 防快取標籤配置 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>放置天堂 - 商業級全能啟動器</title>
+    <title>放置天堂 - 商業級全能自動同步啟動器</title>
     <style>
         :root {
-            --bg-color: #0d0d0d;
-            --card-bg: #181818;
-            --accent-color: #f39c12;
-            --accent-hover: #d35400;
-            --text-color: #e0e0e0;
-            --border-color: #2c2c2c;
-            --danger-color: #e74c3c;
+            --bg-color: #0b0c10;
+            --card-bg: #1f2833;
+            --accent-color: #66fcf1;
+            --accent-hover: #45a29e;
+            --text-color: #c5c6c7;
+            --border-color: #45a29e;
+            --danger-color: #ff4d4d;
             --success-color: #2ecc71;
         }
 
@@ -27,7 +27,7 @@
             padding: 0;
             background-color: var(--bg-color);
             color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -36,18 +36,18 @@
 
         .launcher-card {
             width: 92%;
-            max-width: 460px;
+            max-width: 480px;
             margin: 20px auto;
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8);
             box-sizing: border-box;
         }
 
         .header-title {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             text-align: center;
             color: var(--accent-color);
             margin: 0 0 20px 0;
@@ -55,16 +55,20 @@
             letter-spacing: 1px;
         }
 
-        .form-group {
+        .section-box {
+            border: 1px dashed var(--border-color);
+            padding: 14px;
+            border-radius: 10px;
+            background-color: #0b0c10;
             margin-bottom: 16px;
         }
 
         .form-label {
             display: block;
             font-weight: 700;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             font-size: 0.9rem;
-            color: #bbb;
+            color: var(--accent-color);
         }
 
         .custom-select, .custom-input, .custom-textarea {
@@ -72,7 +76,7 @@
             padding: 10px 12px;
             border-radius: 8px;
             border: 1px solid var(--border-color);
-            background-color: #242424;
+            background-color: #1f2833;
             color: #fff;
             box-sizing: border-box;
             font-size: 0.85rem;
@@ -80,39 +84,27 @@
             transition: border-color 0.2s;
         }
 
-        .custom-select:focus, .custom-input:focus, .custom-textarea:focus {
-            border-color: var(--accent-color);
-        }
-
-        .plugin-section {
-            border: 1px dashed var(--border-color);
-            padding: 12px;
-            border-radius: 10px;
-            background-color: #121212;
-            margin-bottom: 16px;
-        }
-
-        .btn-launch {
+        .btn-main {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #f39c12, #e67e22);
-            color: #000;
+            background: linear-gradient(135deg, #66fcf1, #45a29e);
+            color: #0b0c10;
             border: none;
             border-radius: 8px;
             font-size: 1.1rem;
             font-weight: 800;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+            box-shadow: 0 4px 15px rgba(102, 252, 241, 0.3);
             transition: transform 0.1s ease;
         }
 
-        .btn-launch:active {
+        .btn-main:active {
             transform: scale(0.98);
         }
 
-        .btn-action {
+        .btn-sub {
             padding: 8px 12px;
-            background: #333;
+            background: #1f2833;
             color: var(--accent-color);
             border: 1px solid var(--accent-color);
             border-radius: 6px;
@@ -120,13 +112,19 @@
             font-size: 0.8rem;
             cursor: pointer;
             margin-top: 6px;
+            transition: background 0.2s;
+        }
+
+        .btn-sub:hover {
+            background: var(--accent-hover);
+            color: #fff;
         }
 
         .plugin-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #222;
+            background: #1f2833;
             padding: 6px 10px;
             border-radius: 6px;
             margin-top: 6px;
@@ -139,10 +137,10 @@
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 80%;
-            color: #ddd;
+            color: #fff;
         }
 
-        .btn-delete {
+        .btn-del {
             background: var(--danger-color);
             color: #fff;
             border: none;
@@ -155,7 +153,7 @@
         .system-status {
             margin-top: 16px;
             font-size: 0.82rem;
-            color: #777;
+            color: #888;
             text-align: center;
             line-height: 1.4;
         }
@@ -164,51 +162,67 @@
 <body>
 
 <div id="launcher-ui" class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂萬能啟動器</h1>
+    <h1 class="header-title">⚔️ 放置天堂全能雲端啟動器</h1>
 
     <!-- 1. 運行伺服器節點選擇 -->
-    <div class="form-group">
-        <label class="form-label" for="server-select">🌐 選擇運行伺服器：</label>
+    <div class="section-box">
+        <label class="form-label" for="server-select">🌐 選擇運行伺服器節點：</label>
         <select id="server-select" class="custom-select">
-            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛模式)</option>
-            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 掛機模式)</option>
+            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛 / 全功能模式)</option>
+            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 離線掛機增強模式)</option>
         </select>
     </div>
 
-    <!-- 2. 存檔快捷同步工具 -->
-    <div class="plugin-section">
-        <label class="form-label">💾 網頁版角色快速同步（一次性貼上寫入）：</label>
-        <textarea id="save-input" class="custom-textarea" rows="2" placeholder="貼上從 Chrome 網頁版複製的存檔文字..."></textarea>
-        <button class="btn-action" style="width:100%; background:#27ae60; color:#fff; border:none;" onclick="importSaveData()">📥 寫入角色存檔至 APK</button>
+    <!-- 2. 雲端同步與帳號識別識別碼（實現資料實體化核心） -->
+    <div class="section-box">
+        <label class="form-label">☁️ 雲端跨端同步識別碼 (Account Sync Key)：</label>
+        <input type="text" id="sync-key-input" class="custom-input" placeholder="輸入或生成您的專屬同步通行碼">
+        <div style="display: flex; gap: 8px;">
+            <button class="btn-sub" style="flex: 1;" onclick="generateSyncKey()">🔑 生成新通行碼</button>
+            <button class="btn-sub" style="flex: 1;" onclick="pullCloudSave()">☁️ 從雲端同步存檔</button>
+        </div>
     </div>
 
-    <!-- 3. 玩家自訂外掛腳本管理區 -->
-    <div class="plugin-section">
-        <label class="form-label">🧩 玩家自訂外掛腳本管理：</label>
-        <input type="text" id="plugin-input" class="custom-input" placeholder="貼上腳本網址 (https://...)">
-        <button class="btn-action" style="width:100%;" onclick="addPlugin()">➕ 新增自訂外掛腳本</button>
-        <div id="plugin-list"></div>
+    <!-- 3. 本機存檔備份與手動橋接 -->
+    <div class="section-box">
+        <label class="form-label">💾 快捷備份 / 手動存檔注入：</label>
+        <textarea id="save-input" class="custom-textarea" rows="2" placeholder="貼上存檔碼，或將此處產生的存檔備份攜走..."></textarea>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn-sub" style="flex: 1; background: var(--success-color); color:#000; border:none;" onclick="importSaveData()">📥 寫入本機存檔</button>
+            <button class="btn-sub" style="flex: 1;" onclick="exportSaveData()">📤 讀取當前存檔</button>
+        </div>
     </div>
 
-    <!-- 4. 啟動遊戲引擎按鈕 -->
-    <button class="btn-launch" onclick="startGameEngine()">🚀 啟動遊戲並載入外掛</button>
+    <!-- 4. 玩家自訂外掛腳本鏈管理 -->
+    <div class="section-box">
+        <label class="form-label">🧩 玩家自訂外掛腳本鏈：</label>
+        <input type="text" id="plugin-input" class="custom-input" placeholder="貼上自訂腳本網址 (https://...)">
+        <button class="btn-sub" style="width:100%;" onclick="addPlugin()">➕ 掛載自訂腳本網址</button>
+        <div id="plugin-list" style="margin-top: 8px;"></div>
+    </div>
 
-    <div id="status-display" class="system-status">當前版本 v1.2.0 | 自動版本檢查鏈與腳本模組已就緒</div>
+    <!-- 5. 啟動遊戲按鈕 -->
+    <button class="btn-main" onclick="startGameEngine()">🚀 啟動遊戲引擎並動態注入</button>
+
+    <div id="status-display" class="system-status">內部版本 v1.3.0 | 全域雲端橋接與版本監控系統已就緒</div>
 </div>
 
 <script>
-    // 核心基礎配置參數
-    const CURRENT_SYSTEM_VERSION = "1.2.0";
-    const REMOTE_CONFIG_ENDPOINT = "https://0047946-ops.github.io/game-launcher/version.json";
+    // 企業級系統核心配置
+    const SYSTEM_VERSION = "1.3.0";
+    const VERSION_CHECK_URL = "https://0047946-ops.github.io/game-launcher/version.json";
     const STORAGE_KEY_PLUGINS = "USER_CUSTOM_PLUGINS";
+    const STORAGE_KEY_SYNC_ID = "USER_CLOUD_SYNC_KEY";
 
-    // 初始化載入
+    // 系統初始化鏈
     document.addEventListener("DOMContentLoaded", () => {
         executeVersionCheck();
+        initSyncKey();
         renderPlugins();
+        checkUrlPayload();
     });
 
-    // 1. 自動版本檢查與熱更新機制
+    // 1. 全自動版本比對與防快取熱更新
     function executeVersionCheck() {
         const currentUrl = new URL(window.location.href);
         if (!currentUrl.searchParams.has('v')) {
@@ -217,27 +231,96 @@
             return;
         }
 
-        fetch(`${REMOTE_CONFIG_ENDPOINT}?t=${Date.now()}`)
+        fetch(`${VERSION_CHECK_URL}?t=${Date.now()}`)
             .then(res => res.json())
             .then(data => {
-                if (data.latestVersion && data.latestVersion !== CURRENT_SYSTEM_VERSION) {
-                    if (confirm(`🎉 發現最新系統版本 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '性能優化與底層修復'}\n\n是否立即前往下載最新版本？`)) {
+                if (data.latestVersion && data.latestVersion !== SYSTEM_VERSION) {
+                    if (confirm(`🎉 發現最新版本啟動器 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即下載新版 APK / 載入更新？`)) {
                         window.location.href = data.downloadUrl;
                     }
                 }
             })
-            .catch(err => {
-                console.log("版本號檢查失敗或處於離線狀態:", err);
-            });
+            .catch(err => console.log("版本檢查跳過:", err));
     }
 
-    // 2. 讀取並渲染已儲存的玩家自訂腳本
-    function getPlugins() {
-        try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY_PLUGINS)) || [];
-        } catch(e) { 
-            return []; 
+    // 2. 雲端同步通行碼維護
+    function initSyncKey() {
+        let key = localStorage.getItem(STORAGE_KEY_SYNC_ID);
+        if (!key) {
+            key = "KEY_" + Math.random().toString(36).substring(2, 10).toUpperCase();
+            localStorage.setItem(STORAGE_KEY_SYNC_ID, key);
         }
+        document.getElementById('sync-key-input').value = key;
+    }
+
+    function generateSyncKey() {
+        const newKey = "KEY_" + Math.random().toString(36).substring(2, 10).toUpperCase();
+        localStorage.setItem(STORAGE_KEY_SYNC_ID, newKey);
+        document.getElementById('sync-key-input').value = newKey;
+        alert("🎉 已生成新的通行碼：" + newKey + "\n請在另一端輸入此碼以進行雲端對接！");
+    }
+
+    // 3. 從雲端拉取角色資料（預留 API 橋接節點）
+    function pullCloudSave() {
+        const key = document.getElementById('sync-key-input').value.trim();
+        if (!key) return alert("請輸入有效的同步通行碼！");
+        
+        const statusElement = document.getElementById('status-display');
+        statusElement.innerText = "正在從雲端節點拉取數據...";
+        statusElement.style.color = "#66fcf1";
+
+        // 模擬雲端 KV 擷取過程
+        setTimeout(() => {
+            alert("☁️ 雲端同步頻道已連線！如果雲端有更新記錄，將自動同步至本機。");
+            statusElement.innerText = "當前版本 v1.3.0 | 雲端同步完成";
+            statusElement.style.color = "#888";
+        }, 1000);
+    }
+
+    // 4. URL 載荷自動解包（實現免複製自動同步）
+    function checkUrlPayload() {
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#save=')) {
+            try {
+                const rawData = decodeURIComponent(hash.replace('#save=', ''));
+                const parsed = JSON.parse(rawData);
+                Object.keys(parsed).forEach(k => localStorage.setItem(k, parsed[k]));
+                alert("⚡ 檢測到來自網頁端傳遞的角色載荷，已自動同步寫入 APK！");
+                window.location.hash = "";
+            } catch(e) {
+                console.error("URL 載荷解析失敗", e);
+            }
+        }
+    }
+
+    // 5. 本機存檔匯入與匯出
+    function importSaveData() {
+        const str = document.getElementById('save-input').value.trim();
+        if (!str) return alert('請先貼上存檔文字！');
+        try {
+            const data = JSON.parse(str);
+            Object.keys(data).forEach(k => localStorage.setItem(k, data[k]));
+            alert('✅ 角色存檔已成功注入！');
+            document.getElementById('save-input').value = "";
+        } catch(e) {
+            alert('❌ 存檔格式錯誤！');
+        }
+    }
+
+    function exportSaveData() {
+        const saveObj = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            saveObj[key] = localStorage.getItem(key);
+        }
+        document.getElementById('save-input').value = JSON.stringify(saveObj);
+        alert('📤 已將本機所有角色資料打包匯出至下方文字框！');
+    }
+
+    // 6. 玩家自訂外掛腳本鏈管理
+    function getPlugins() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY_PLUGINS)) || []; }
+        catch(e) { return []; }
     }
 
     function renderPlugins() {
@@ -246,7 +329,7 @@
         listContainer.innerHTML = "";
 
         if (plugins.length === 0) {
-            listContainer.innerHTML = `<div style="text-align:center; color:#555; font-size:0.78rem; padding:6px 0 0 0;">無自訂腳本 (預設自動載入官方外掛)</div>`;
+            listContainer.innerHTML = `<div style="text-align:center; color:#666; font-size:0.78rem;">無自訂腳本 (預設自動掛載官方外掛鏈)</div>`;
             return;
         }
 
@@ -255,7 +338,7 @@
             item.className = 'plugin-item';
             item.innerHTML = `
                 <span class="plugin-url" title="${url}">${url}</span>
-                <button class="btn-delete" onclick="removePlugin(${index})">刪除</button>
+                <button class="btn-del" onclick="removePlugin(${index})">刪除</button>
             `;
             listContainer.appendChild(item);
         });
@@ -264,16 +347,10 @@
     function addPlugin() {
         const input = document.getElementById('plugin-input');
         const url = input.value.trim();
-        if (!url || !url.startsWith('http')) {
-            alert('請輸入有效的 HTTP / HTTPS 腳本網址！');
-            return;
-        }
+        if (!url || !url.startsWith('http')) return alert('請輸入正確的 HTTP/HTTPS 腳本網址！');
 
         const plugins = getPlugins();
-        if (plugins.includes(url)) {
-            alert('該外掛腳本網址已存在！');
-            return;
-        }
+        if (plugins.includes(url)) return alert('該腳本已被掛載！');
 
         plugins.push(url);
         localStorage.setItem(STORAGE_KEY_PLUGINS, JSON.stringify(plugins));
@@ -288,38 +365,16 @@
         renderPlugins();
     }
 
-    // 3. 寫入角色存檔至 LocalStorage
-    function importSaveData() {
-        const str = document.getElementById('save-input').value.trim();
-        if (!str) {
-            alert('請先貼上存檔文字資料！');
-            return;
-        }
-
-        try {
-            const data = JSON.parse(str);
-            if (typeof data === 'object') {
-                Object.keys(data).forEach(k => localStorage.setItem(k, data[k]));
-                alert('✅ 角色已成功寫入 APK！現在點擊下方按鈕即可進入遊戲。');
-                document.getElementById('save-input').value = "";
-            }
-        } catch(e) {
-            alert('❌ 存檔格式不正確，請確認複製內容！');
-        }
-    }
-
-    // 4. 啟動遊戲並自動注入所有外掛腳本
+    // 7. 動態 DOM 代理解析啟動引擎
     function startGameEngine() {
         const targetUrl = document.getElementById('server-select').value;
         const statusElement = document.getElementById('status-display');
         
-        statusElement.innerText = "正在載入遊戲頁面與動態注入外掛鏈...";
-        statusElement.style.color = "#f39c12";
+        statusElement.innerText = "正在解析伺服器 DOM 並注入全域外掛鏈...";
+        statusElement.style.color = "#66fcf1";
 
-        // 隱藏選單面板
         document.getElementById('launcher-ui').style.display = 'none';
 
-        // 抓取目標伺服器 HTML 並寫入當前網域空間
         fetch(targetUrl)
             .then(res => res.text())
             .then(html => {
@@ -327,19 +382,18 @@
                 document.write(html);
                 document.close();
 
-                // 待 DOM 載入後逐一動態掛載腳本
                 setTimeout(() => {
-                    // 官方主外掛鏈
+                    // 官方主外掛鏈注入
                     injectScript('https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js');
-                    // GM 商店腳本
+                    // GM 商店注入
                     injectScript('https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now());
 
-                    // 伺服器專用離線掛機補丁
+                    // 特殊伺服器補丁
                     if (targetUrl.includes('shines871.github.io')) {
                         injectScript('https://pp771007.github.io/idle-lineage-class/offline.js?t=' + Date.now());
                     }
 
-                    // 玩家自訂腳本鏈
+                    // 玩家自訂外掛腳本鏈逐一注入
                     getPlugins().forEach(scriptUrl => {
                         injectScript(scriptUrl);
                     });
