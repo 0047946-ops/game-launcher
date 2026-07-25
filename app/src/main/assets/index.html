@@ -37,10 +37,11 @@
         .btn-direct { background:linear-gradient(135deg, #00ff41, #00b32d); color:#000; }
         .btn-file { background:linear-gradient(135deg, #ffa500, #ff7c00); color:#000; }
         .btn-sync { background:linear-gradient(135deg, #66fcf1, #45a29e); color:#0b0c10; }
+        .btn-plugin { background:linear-gradient(135deg, #e0c3fc, #8ec5fc); color:#000; }
 
-        select {
+        select, input[type="text"] {
             width:100%; padding:12px; background:#1f2833; color:#fff;
-            border:1px solid var(--accent); border-radius:8px; font-size:0.9rem;
+            border:1px solid var(--accent); border-radius:8px; font-size:0.85rem;
             box-sizing:border-box; margin-bottom:8px;
         }
         
@@ -82,6 +83,13 @@
         <button class="btn" style="background:#a8ff78; color:#000;" onclick="readFromClipboard()">⚡ 自動讀取手機剪貼簿並登入</button>
     </div>
 
+    <!-- 🔥 玩家添加自訂外掛腳本區 -->
+    <div class="box">
+        <label class="label">🧩 玩家自訂第三方外掛腳本 URL</label>
+        <input type="text" id="pluginUrlInput" placeholder="請輸入外掛 JS 網址 (https://...)">
+        <button class="btn btn-plugin" onclick="saveCustomPlugin()">💾 儲存並啟用自訂外掛腳本</button>
+    </div>
+
     <div id="msg" class="status" style="display:none;"></div>
 </div>
 
@@ -89,6 +97,16 @@
     const SERVERS = {
         'shines871': 'https://shines871.github.io/idle-lineage-class/',
         'pp771007': 'https://pp771007.github.io/idle-lineage-class/'
+    };
+
+    window.onload = function() {
+        // 初始化讀取自訂外掛網址
+        if (window.AndroidBridge && window.AndroidBridge.getCustomPluginUrl) {
+            const currentUrl = window.AndroidBridge.getCustomPluginUrl();
+            if (currentUrl) {
+                document.getElementById('pluginUrlInput').value = currentUrl;
+            }
+        }
     };
 
     function log(txt, type = 'info') {
@@ -134,7 +152,6 @@
         }
 
         if (window.AndroidBridge && window.AndroidBridge.saveBase64File) {
-            // 使用 Base64 轉換透過原生 Android 導出
             const base64 = btoa(unescape(encodeURIComponent(save)));
             window.AndroidBridge.saveBase64File(base64, `fable5_save_${Date.now()}.json`);
             log('✅ 存檔已指令匯出，請至手機 Download 資料夾查看！', 'success');
@@ -157,11 +174,25 @@
         }
     }
 
+    // 5. 儲存自訂外掛網址
+    function saveCustomPlugin() {
+        const url = document.getElementById('pluginUrlInput').value.trim();
+        if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+            return log('⚠️ 請輸入以 http:// 或 https:// 開頭的完整外掛網址！', 'error');
+        }
+
+        if (window.AndroidBridge && window.AndroidBridge.saveCustomPluginUrl) {
+            window.AndroidBridge.saveCustomPluginUrl(url);
+            log(url ? '✅ 自訂外掛網址已儲存！進入遊戲時將自動載入。' : '✅ 已清除自訂外掛網址！', 'success');
+        } else {
+            log('⚠️ 未偵測到原生 Android 橋樑', 'error');
+        }
+    }
+
     // 統一注入並跳轉
     function saveAndLaunch(saveData, successMsg) {
         localStorage.setItem('RAW_INJECT_SAVE_DATA', saveData);
         
-        // 雙重存入 Android 原生空間
         if (window.AndroidBridge && window.AndroidBridge.saveGameData) {
             window.AndroidBridge.saveGameData(saveData);
         }
