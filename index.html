@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>放置天堂 - 100% 同步門戶 v3.7</title>
+    <title>放置天堂 - 100% 同步門戶 v3.8</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -42,21 +42,28 @@
             width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color);
             background:#1f2833; color:#fff; box-sizing:border-box; font-size:0.85rem;
         }
-        .custom-textarea { min-height:80px; resize:vertical; font-family: monospace; font-size: 0.75rem; }
+        .custom-textarea { min-height:75px; resize:vertical; font-family: monospace; font-size: 0.75rem; }
+        
         .btn-main {
-            width:100%; padding:16px; margin:12px 0 8px;
+            width:100%; padding:14px; margin:8px 0;
             background:linear-gradient(135deg, #66fcf1, #45a29e);
-            color:#0b0c10; border:none; border-radius:10px; font-size:1.1rem; font-weight:900;
-            cursor:pointer; transition: all 0.3s;
+            color:#0b0c10; border:none; border-radius:10px; font-size:1.05rem; font-weight:900;
+            cursor:pointer; transition: all 0.25s;
         }
-        .btn-main:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102,252,241,0.3); }
-        .btn-main:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-main:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(102,252,241,0.3); }
+        
+        .btn-direct {
+            background: linear-gradient(135deg, #00ff41, #00b32d);
+            color: #000;
+        }
+        
         .btn-sub {
             padding:10px 12px; background:#1f2833; color:var(--accent-color);
             border:1px solid var(--accent-color); border-radius:6px; cursor:pointer;
             font-size: 0.75rem; font-weight: 600;
         }
         .btn-sub:hover { background: var(--accent-color); color: #0b0c10; }
+        
         .status-box {
             margin-top:12px; padding:12px; border-radius:8px; font-size:0.8rem;
             background: rgba(0,0,0,0.4); border: 1px solid var(--border-color);
@@ -65,8 +72,10 @@
         .status-success { color: var(--success); }
         .status-error { color: var(--error); }
         .status-warning { color: var(--warning); }
+        
         .button-group { display:flex; gap:8px; margin-top:10px; flex-wrap: wrap; }
         .button-group > * { flex: 1; min-width: 75px; }
+        
         .sync-guide { 
             background: rgba(102,252,241,0.1); border: 1px solid var(--accent-color);
             padding: 12px; border-radius: 8px; font-size: 0.8rem; margin: 12px 0;
@@ -77,43 +86,36 @@
 <body>
 
 <div class="launcher-card">
-    <h1 class="header-title">⚔️ 放置天堂 - 同步門戶 v3.7</h1>
-    <div class="version-badge">✨ 萬能 SIG1 容錯解構器 | 雙軌動態注入</div>
+    <h1 class="header-title">⚔️ 放置天堂 - 同步門戶 v3.8</h1>
+    <div class="version-badge">✨ 支援「免存檔直進」| 雙外掛 / 離線增強預載</div>
 
     <!-- 伺服器選擇 -->
     <div class="section-box">
-        <label class="form-label">🌐 選擇目標伺服器</label>
+        <label class="form-label">🌐 選擇目標伺服器節點</label>
         <select id="server-select" class="custom-input">
-            <option value="shines871">伺服器一 (shines871 - 離線增強模式)</option>
-            <option value="pp771007">伺服器二 (pp771007 - 雙外掛模式)</option>
+            <option value="pp771007">伺服器二 (pp771007 - 雙外掛全功能模式)</option>
+            <option value="shines871">伺服器一 (shines871 - 離線掛機增強模式)</option>
         </select>
     </div>
 
-    <!-- 同步指南 -->
-    <div class="sync-guide">
-        <strong>📋 使用說明：</strong><br>
-        <strong style="color: #00ff41;">🟢 情況 A：APK → 網頁</strong><br>
-        1. 在 APK 內遊玩完成<br>
-        2. APK 設定→備份存檔→導出 JSON 或 SIG1<br>
-        3. 把文字或檔案內容貼到下方<br>
-        4. 點「🚀 進入遊戲」即可在網頁版還原<br>
-        <br>
-        <strong style="color: #66fcf1;">🟦 情況 B：網頁 → APK</strong><br>
-        1. 先在網頁版進入遊戲（任意伺服器）<br>
-        2. 點「📤 導出存檔」下載 JSON<br>
-        3. 把 JSON 貼到 APK<br>
-        4. APK 設定→備份存檔→匯入 JSON
+    <!-- 核心操作按鈕區 (直進 vs 帶存檔) -->
+    <div style="margin-bottom: 18px;">
+        <!-- 路徑 1：完全免存檔，直接開局（建立角色） -->
+        <button class="btn-main btn-direct" onclick="launchDirectNoSave()">🎮 免存檔直接進入遊戲 (自動載入外掛功能)</button>
+        
+        <!-- 路徑 2：攜帶 JSON / SIG1 存檔注入進入 -->
+        <button class="btn-main" onclick="launchGameWithSave()">🚀 寫入存檔並進入遊戲</button>
     </div>
 
-    <!-- 角色資料 -->
+    <!-- 角色資料 (僅在有舊存檔時使用) -->
     <div class="section-box">
-        <label class="form-label">📦 貼上 JSON 或 SIG1 存檔</label>
-        <textarea id="save-json-textarea" class="custom-textarea" placeholder="從 APK 或網頁導出的 JSON / SIG1 內容"></textarea>
+        <label class="form-label">📦 存檔注入區 (無存檔可留空)</label>
+        <textarea id="save-json-textarea" class="custom-textarea" placeholder="若有 JSON 或 SIG1 舊存檔請貼於此處..."></textarea>
         
         <div class="button-group">
             <button class="btn-sub" onclick="document.getElementById('json-file-input').click()">📁 讀取檔案</button>
             <button class="btn-sub" onclick="exportFromGame()">📤 導出存檔</button>
-            <button class="btn-sub" onclick="validateData()">✓ 驗證</button>
+            <button class="btn-sub" onclick="validateData()">✓ 驗證存檔</button>
         </div>
         <input type="file" id="json-file-input" accept=".json,.txt" style="display:none;" onchange="handleFileSelect(event)">
 
@@ -123,9 +125,7 @@
         </div>
     </div>
 
-    <!-- 主按鈕 -->
-    <button class="btn-main" id="launch-btn" onclick="launchGameWithURL()">🚀 進入遊戲（注入存檔）</button>
-    <button class="btn-main" id="clear-btn" style="background: linear-gradient(135deg, #ff6b6b, #ff4757); margin-top: 0;" onclick="clearBeforeLaunch()">🗑️ 清空舊資料後進入</button>
+    <button class="btn-main" id="clear-btn" style="background: linear-gradient(135deg, #ff6b6b, #ff4757); margin-top: 0; font-size:0.9rem;" onclick="clearBeforeLaunch()">🗑️ 清空本機資料後進入</button>
 
     <!-- 狀態訊息 -->
     <div id="status-message" class="status-box" style="display:none;">
@@ -152,63 +152,26 @@
         }
     };
 
-    // ===== 🔥 v3.7 萬能 SIG1 容錯解構器 =====
+    // SIG1 容錯解析器
     function parseSIG1(rawData) {
         if (typeof rawData !== 'string') return null;
-
-        // 1. 預先清除不可見字元與換行符號
         let cleanText = rawData.replace(/[\r\n\t\s]/g, '');
 
-        if (!cleanText.startsWith('SIG1:')) {
-            return cleanText; // 不是 SIG1，直接返回原文
-        }
-
-        console.log('[parseSIG1] 開始進行深度 SIG1 解碼，總長度:', cleanText.length);
+        if (!cleanText.startsWith('SIG1:')) return cleanText;
 
         try {
-            // 2. 切除 SIG1: 前綴
             let body = cleanText.substring(5);
-            let base64Candidate = '';
-
-            // 3. 處理包含多重冒號的狀況，抓取最後一段或主體段落
-            if (body.includes(':')) {
-                const parts = body.split(':');
-                // 優先過濾出最長且符合 Base64 特徵的區塊
-                base64Candidate = parts.reduce((a, b) => a.length > b.length ? a : b);
-            } else {
-                base64Candidate = body;
-            }
-
-            // 4. 清理 Base64 字串中的非法字元，確保完整性
+            let base64Candidate = body.includes(':') ? body.split(':').reduce((a, b) => a.length > b.length ? a : b) : body;
             base64Candidate = base64Candidate.replace(/[^A-Za-z0-9+/=]/g, '');
 
-            // 5. 自動補齊 Base64 的 `=` 號 padding
-            while (base64Candidate.length % 4 !== 0) {
-                base64Candidate += '=';
-            }
+            while (base64Candidate.length % 4 !== 0) base64Candidate += '=';
 
-            // 6. 執行跨端二進位 UTF-8 安全解碼 (避免中文亂碼與 atob 崩潰)
             const binaryStr = atob(base64Candidate);
             const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) {
-                bytes[i] = binaryStr.charCodeAt(i);
-            }
+            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
             
-            const decodedResult = new TextDecoder('utf-8').decode(bytes);
-            console.log('[parseSIG1] 解碼成功！前 60 字元:', decodedResult.substring(0, 60));
-            return decodedResult;
-
+            return new TextDecoder('utf-8').decode(bytes);
         } catch (e) {
-            console.error('[parseSIG1] 嘗試標準解碼失敗，啟用降級向下相容模式...', e);
-            try {
-                // 降級備用模式：強制提取正則匹配
-                const match = cleanText.match(/[A-Za-z0-9+/]{20,}={0,2}/);
-                if (match) {
-                    return decodeURIComponent(escape(atob(match[0])));
-                }
-            } catch (err) {
-                console.error('[parseSIG1] 降級模式亦失敗:', err);
-            }
             return null;
         }
     }
@@ -227,76 +190,26 @@
         validationEl.style.display = 'block';
     }
 
-    function validateData() {
-        const input = document.getElementById('save-json-textarea').value.trim();
-        
-        if (!input) {
-            showValidation(`<span class="status-error">❌ 請先輸入資料</span>`);
-            return;
-        }
+    // 1. 🔥【全新功能】：免存檔直接進入遊戲 (創建角色 / 自動加載外掛)
+    function launchDirectNoSave() {
+        const serverKey = document.getElementById('server-select').value;
+        const baseUrl = CONFIG.SERVER_URLS[serverKey];
+        const serverName = serverKey === 'pp771007' ? '伺服器二 (雙外掛模式)' : '伺服器一 (增強離線模式)';
 
-        try {
-            let data = input;
+        showStatus(`⚡ 正在進入 ${serverName}...<br>已開啟乾淨模式，請直接創建角色！`, 'success');
 
-            if (input.startsWith('SIG1:')) {
-                const decoded = parseSIG1(input);
-                if (!decoded) {
-                    showValidation(`<span class="status-error">❌ SIG1 簽章解構失敗<br>請確認複製的存檔文字是否完整</span>`);
-                    return;
-                }
-                data = decoded;
-            }
-
-            const parsed = JSON.parse(data);
-            const saveKeys = CONFIG.GAME_SAVE_KEYS.filter(key => parsed.hasOwnProperty(key));
-            const sizeKB = (new Blob([data]).size / 1024).toFixed(2);
-            
-            let validationHTML = `
-                <div><span class="status-success">✓ SIG1 / JSON 解析成功！</span></div>
-                <div style="margin-top: 8px; font-size: 0.75rem;">
-                    <div>📊 解構後大小: ${sizeKB} KB</div>
-                    <div>💾 辨識項目: ${saveKeys.length}/${CONFIG.GAME_SAVE_KEYS.length}</div>
-                </div>
-            `;
-            
-            if (saveKeys.length === 0) {
-                validationHTML += `<div style="margin-top: 8px; color: var(--warning);">⚠️ 提醒：該 JSON 為特殊/自訂格式，進入遊戲時將嘗試強制寫入</div>`;
-            }
-            
-            showValidation(validationHTML);
-        } catch(e) {
-            console.error('[validateData] 驗證失敗:', e);
-            showValidation(`<span class="status-error">❌ JSON 結構不完整: ${e.message}</span>`);
-        }
+        setTimeout(() => {
+            // 直接跳轉，不夾帶任何存檔 Hash，避免死循環
+            window.location.href = baseUrl;
+        }, 400);
     }
 
-    function exportFromGame() {
-        showStatus('💡 此按鈕需要在遊戲內使用（有存檔時）<br>建議: 進入遊戲後點擊「備份存檔」→「導出 JSON」', 'info');
-    }
-
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-            try {
-                const content = ev.target.result;
-                document.getElementById('save-json-textarea').value = content;
-                showStatus('✅ 檔案讀取成功！', 'success');
-                setTimeout(() => validateData(), 300);
-            } catch(e) {
-                showStatus(`❌ 檔案讀取失敗: ${e.message}`, 'error');
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    function launchGameWithURL() {
+    // 2. 帶存檔進入遊戲
+    function launchGameWithSave() {
         const dataStr = document.getElementById('save-json-textarea').value.trim();
         
         if (!dataStr) {
-            showStatus('⚠️ 請先輸入存檔資料', 'warning');
+            showStatus('⚠️ 存檔輸入區是空的！如果是新角色，請點擊綠色的「免存檔直接進入遊戲」按鈕！', 'warning');
             return;
         }
 
@@ -309,61 +222,72 @@
                 data = decoded;
             }
 
-            // 驗證是否為合法 JSON
             JSON.parse(data);
 
             const serverKey = document.getElementById('server-select').value;
             const baseUrl = CONFIG.SERVER_URLS[serverKey];
             
-            // 寫入 localStorage 做全域載荷備份
             localStorage.setItem('PRELOAD_INJECT_SAVE', data);
-
             const encoded = encodeURIComponent(data);
             const finalUrl = baseUrl + '#inject_save=' + encoded;
 
-            showStatus('⏳ 正在注入存檔並啟動遊戲...', 'info');
+            showStatus('⏳ 正在寫入角色資料並啟動...', 'info');
             
             setTimeout(() => {
                 window.location.href = finalUrl;
             }, 400);
             
         } catch(e) {
-            console.error('[launchGameWithURL] 錯誤:', e);
             showStatus(`❌ 注入失敗: ${e.message}`, 'error');
         }
     }
 
-    function clearBeforeLaunch() {
-        if (confirm('⚠️ 進入遊戲前會清空本機舊資料，確定要繼續嗎？')) {
-            try {
-                CONFIG.GAME_SAVE_KEYS.forEach(key => {
-                    localStorage.removeItem(key);
-                });
+    function validateData() {
+        const input = document.getElementById('save-json-textarea').value.trim();
+        if (!input) return showValidation(`<span class="status-error">❌ 請先輸入資料</span>`);
 
-                const serverKey = document.getElementById('server-select').value;
-                const baseUrl = CONFIG.SERVER_URLS[serverKey];
-                
-                showStatus('✅ 已清空舊資料，正在進入遊戲...', 'success');
-                setTimeout(() => {
-                    window.location.href = baseUrl;
-                }, 400);
-            } catch(e) {
-                showStatus(`❌ 錯誤: ${e.message}`, 'error');
-            }
+        try {
+            let data = input.startsWith('SIG1:') ? parseSIG1(input) : input;
+            if (!data) return showValidation(`<span class="status-error">❌ SIG1 解析失敗</span>`);
+
+            const parsed = JSON.parse(data);
+            const saveKeys = CONFIG.GAME_SAVE_KEYS.filter(key => parsed.hasOwnProperty(key));
+            const sizeKB = (new Blob([data]).size / 1024).toFixed(2);
+            
+            showValidation(`
+                <div><span class="status-success">✓ 存檔格式正確！</span></div>
+                <div style="margin-top: 6px; font-size: 0.75rem;">
+                    <div>📊 解構大小: ${sizeKB} KB | 💾 識別項目: ${saveKeys.length}/${CONFIG.GAME_SAVE_KEYS.length}</div>
+                </div>
+            `);
+        } catch(e) {
+            showValidation(`<span class="status-error">❌ JSON 結構錯誤: ${e.message}</span>`);
         }
     }
 
-    window.addEventListener('load', () => {
-        const existingData = {};
-        CONFIG.GAME_SAVE_KEYS.forEach(key => {
-            const value = localStorage.getItem(key);
-            if (value) existingData[key] = value;
-        });
+    function handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            document.getElementById('save-json-textarea').value = ev.target.result;
+            showStatus('✅ 檔案讀取成功！', 'success');
+            setTimeout(() => validateData(), 300);
+        };
+        reader.readAsText(file);
+    }
 
-        if (Object.keys(existingData).length > 0) {
-            showStatus(`📂 本機偵測到 ${Object.keys(existingData).length} 項舊遊戲資料`, 'info');
+    function exportFromGame() {
+        showStatus('💡 請在進入遊戲後點擊「備份存檔」→「導出 JSON」進行備份！', 'info');
+    }
+
+    function clearBeforeLaunch() {
+        if (confirm('⚠️ 確定要清空本機的所有舊資料嗎？')) {
+            CONFIG.GAME_SAVE_KEYS.forEach(key => localStorage.removeItem(key));
+            showStatus('✅ 已清空舊資料！可點擊上方綠色按鈕進入創建新角色。', 'success');
         }
-    });
+    }
 </script>
 </body>
 </html>
