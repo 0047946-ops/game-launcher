@@ -32,7 +32,10 @@ public class MainActivity extends Activity {
     private final static int FILE_CHOOSER_RESULT_CODE = 10001;
     private static final String PREF_NAME = "IdleLineageSaveData";
     private static final String KEY_SAVE_JSON = "player_save_json";
-    private static final String KEY_CUSTOM_PLUGIN_URL = "custom_plugin_url";
+    
+    // 支援雙外掛腳本 KEY
+    private static final String KEY_PLUGIN_URL_1 = "custom_plugin_url_1";
+    private static final String KEY_PLUGIN_URL_2 = "custom_plugin_url_2";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +60,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 處理檔點擊與下載
+        // 下載監聽器
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -123,14 +126,17 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                
+                // 進入兩大遊戲網址時自動載入腳本與同步人物資料
                 if (url != null && url.startsWith("http")) {
-                    // 1. 預設腳本 1
+                    SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+                    
+                    // 1. 預設雙外掛腳本
                     String js1 = "if(!window.__main_plugin_loaded){window.__main_plugin_loaded=true;" +
                             "var s1=document.createElement('script');" +
                             "s1.src='https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';" +
                             "document.head.appendChild(s1);}";
                     
-                    // 2. 預設腳本 2
                     String js2 = "if(!window.__gm_shop_loaded){window.__gm_shop_loaded=true;" +
                             "var s2=document.createElement('script');" +
                             "s2.src='https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t='+Date.now();" +
@@ -139,18 +145,34 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 3. 注入玩家自訂外掛腳本網址 (若有設定)
-                    SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-                    String customPluginUrl = sp.getString(KEY_CUSTOM_PLUGIN_URL, "");
-                    if (!customPluginUrl.isEmpty()) {
-                        String jsCustom = "if(!window.__custom_plugin_loaded){window.__custom_plugin_loaded=true;" +
-                                "var sc=document.createElement('script');" +
-                                "sc.src='" + customPluginUrl + "';" +
-                                "document.head.appendChild(sc);}";
-                        view.evaluateJavascript(jsCustom, null);
+                    // 2. 注入自訂外掛腳本 1
+                    String plugin1 = sp.getString(KEY_PLUGIN_URL_1, "");
+                    if (!plugin1.isEmpty()) {
+                        String jsCustom1 = "if(!window.__custom_plugin_1_loaded){window.__custom_plugin_1_loaded=true;" +
+                                "var sc1=document.createElement('script');sc1.src='" + plugin1 + "';" +
+                                "document.head.appendChild(sc1);}";
+                        view.evaluateJavascript(jsCustom1, null);
                     }
 
-                    // 4. 攔截下載
+                    // 3. 注入自訂外掛腳本 2
+                    String plugin2 = sp.getString(KEY_PLUGIN_URL_2, "");
+                    if (!plugin2.isEmpty()) {
+                        String jsCustom2 = "if(!window.__custom_plugin_2_loaded){window.__custom_plugin_2_loaded=true;" +
+                                "var sc2=document.createElement('script');sc2.src='" + plugin2 + "';" +
+                                "document.head.appendChild(sc2);}";
+                        view.evaluateJavascript(jsCustom2, null);
+                    }
+
+                    // 4. 🔥 實現 APK 人物資料同步：將原生 JSON 自動寫入網頁 localStorage
+                    String localJson = sp.getString(KEY_SAVE_JSON, "");
+                    if (!localJson.isEmpty()) {
+                        String syncJs = "try { " +
+                                "localStorage.setItem('RAW_INJECT_SAVE_DATA', '" + localJson.replace("'", "\\'") + "');" +
+                                "} catch(e){}";
+                        view.evaluateJavascript(syncJs, null);
+                    }
+
+                    // 5. 下載攔截機制
                     String hookDownload =
                         "(function(){" +
                         "document.addEventListener('click', function(e){" +
@@ -174,9 +196,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 處理從手機檔案管理器直接點擊開啟 .json 檔的 Intent
         handleExternalFileIntent(getIntent());
-
         webView.loadUrl("file:///android_asset/index.html");
     }
 
@@ -221,7 +241,6 @@ public class MainActivity extends Activity {
 
     public class AndroidBridge {
 
-        // 1. 匯出檔案到 Download 資料夾
         @JavascriptInterface
         public void saveBase64File(String base64Data, String fileName) {
             runOnUiThread(() -> {
@@ -242,7 +261,6 @@ public class MainActivity extends Activity {
             });
         }
 
-        // 2. 原生私有空間：保存角色資料 JSON
         @JavascriptInterface
         public void saveGameData(String jsonText) {
             SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -250,14 +268,12 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, "✅ 角色進度已成功同步至手機原生儲存區！", Toast.LENGTH_SHORT).show());
         }
 
-        // 3. 原生私有空間：讀取角色資料 JSON
         @JavascriptInterface
         public String loadGameData() {
             SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             return sp.getString(KEY_SAVE_JSON, "");
         }
 
-        // 4. 一鍵取得手機剪貼簿內容
         @JavascriptInterface
         public String getClipboardText() {
             try {
@@ -270,19 +286,23 @@ public class MainActivity extends Activity {
             return "";
         }
 
-        // 5. 新增：保存玩家自訂外掛腳本網址
+        // 新增：儲存與讀取雙外掛腳本 API
         @JavascriptInterface
-        public void saveCustomPluginUrl(String url) {
+        public void saveCustomPluginUrls(String url1, String url2) {
             SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            sp.edit().putString(KEY_CUSTOM_PLUGIN_URL, url).apply();
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, "✅ 自訂外掛腳本網址已儲存！", Toast.LENGTH_SHORT).show());
+            sp.edit().putString(KEY_PLUGIN_URL_1, url1)
+                      .putString(KEY_PLUGIN_URL_2, url2).apply();
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "✅ 雙外掛腳本網址已成功更新！", Toast.LENGTH_SHORT).show());
         }
 
-        // 6. 新增：讀取玩家自訂外掛腳本網址
         @JavascriptInterface
-        public String getCustomPluginUrl() {
-            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            return sp.getString(KEY_CUSTOM_PLUGIN_URL, "");
+        public String getCustomPluginUrl1() {
+            return getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getString(KEY_PLUGIN_URL_1, "");
+        }
+
+        @JavascriptInterface
+        public String getCustomPluginUrl2() {
+            return getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getString(KEY_PLUGIN_URL_2, "");
         }
     }
 
