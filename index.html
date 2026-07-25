@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 強效網頁防快取標籤 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -58,7 +59,7 @@
             font-size: 0.95rem;
         }
 
-        select, input[type="file"], textarea {
+        select, input[type="file"] {
             width: 100%;
             padding: 10px;
             border-radius: 6px;
@@ -103,29 +104,6 @@
             color: #fff;
         }
 
-        .btn-action {
-            width: 48%;
-            padding: 10px;
-            background-color: #333;
-            color: #fff;
-            border: 1px solid var(--accent-color);
-            border-radius: 6px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .btn-action:hover {
-            background-color: var(--accent-color);
-            color: #000;
-        }
-
-        .btn-group {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 8px;
-        }
-
         .clear-btn {
             background: none;
             border: none;
@@ -154,30 +132,6 @@
         </select>
     </div>
 
-    <!-- 遊戲進度 匯出/匯入 功能區域 -->
-    <div class="form-group custom-box">
-        <label>💾 遊戲進度備份與還原：</label>
-        <div class="btn-group">
-            <button class="btn-action" onclick="exportSaveData()">📤 匯出進度檔</button>
-            <button class="btn-action" onclick="toggleImportArea()">📥 貼上匯入文字</button>
-        </div>
-        
-        <input type="file" id="import-save-file" accept=".json,.txt" style="display: none;" onchange="importSaveDataFromFile(event)">
-
-        <div id="export-text-container" style="display:none; margin-top:10px;">
-            <label style="font-size:0.8rem; color:#f39c12;">📋 導出的存檔碼 (已自動複製)：</label>
-            <textarea id="export-textarea" rows="3" readonly style="font-size:0.75rem;"></textarea>
-        </div>
-
-        <div id="import-text-container" style="display:none; margin-top:10px;">
-            <label style="font-size:0.8rem; color:#2ecc71;">📥 請在此貼上存檔文字：</label>
-            <textarea id="import-textarea" rows="3" placeholder="請貼上存檔碼..." style="font-size:0.75rem;"></textarea>
-            <div class="btn-group" style="margin-top:6px;">
-                <button class="btn-action" style="width:100%; background-color:#27ae60;" onclick="saveImportTextToMemory()">✅ 暫存存檔並準備啟動</button>
-            </div>
-        </div>
-    </div>
-
     <!-- 玩家自訂本地外掛 -->
     <div class="form-group custom-box">
         <label for="plugin-file">🧩 自訂本地外掛檔案（選填）：</label>
@@ -193,17 +147,29 @@
 <script>
     const CURRENT_APK_VERSION = "1.2.0";
 
-    // 0. 防快取跳轉
+    // 0. 防快取跳轉 & 檢查 APK 版本更新
     (function() {
         const urlParams = new URLSearchParams(window.location.search);
         if (!urlParams.has('v')) {
             const separator = window.location.href.includes('?') ? '&' : '?';
-            window.location.replace(window.location.href + separator + 'v=' + Date.now());
+            const newUrl = window.location.href + separator + 'v=' + Date.now();
+            window.location.replace(newUrl);
             return;
         }
+
+        fetch('https://0047946-ops.github.io/game-launcher/version.json?t=' + Date.now())
+            .then(res => res.json())
+            .then(data => {
+                if (data.latestVersion && data.latestVersion !== CURRENT_APK_VERSION) {
+                    if (confirm(`🎉 發現新版 APK (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即前往下載最新版？`)) {
+                        window.location.href = data.downloadUrl;
+                    }
+                }
+            })
+            .catch(() => {});
     })();
 
-    // 1. 初始化檢查
+    // 1. 初始化檢查 LocalStorage 自訂外掛
     window.addEventListener('DOMContentLoaded', () => {
         const savedPlugin = localStorage.getItem('custom_plugin_code');
         const savedFileName = localStorage.getItem('custom_plugin_name');
@@ -214,38 +180,26 @@
         }
     });
 
-    // 2. 暫存匯入字串
-    function saveImportTextToMemory() {
-        const val = document.getElementById('import-textarea').value.trim();
-        if (!val) {
-            alert('請先輸入或貼上存檔碼！');
-            return;
+    // 2. 監聽玩家上傳本地外掛 (.js)
+    document.getElementById('plugin-file').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const code = event.target.result;
+                localStorage.setItem('custom_plugin_code', code);
+                localStorage.setItem('custom_plugin_name', file.name);
+                
+                document.getElementById('plugin-status').innerText = `已成功載入：${file.name}`;
+                document.getElementById('plugin-status').style.color = '#2ecc71';
+                document.getElementById('clear-plugin').style.display = 'inline-block';
+                alert('自訂外掛檔案載入成功！啟動遊戲時將自動注入。');
+            };
+            reader.readAsText(file);
         }
-        localStorage.setItem('temp_import_data', val);
-        alert('存檔已成功暫存！點擊「🚀 啟動遊戲」即可自動注入角色。');
-    }
+    });
 
-    function toggleImportArea() {
-        document.getElementById('export-text-container').style.display = 'none';
-        const container = document.getElementById('import-text-container');
-        container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
-    }
-
-    function exportSaveData() {
-        const saveData = {};
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key !== 'custom_plugin_code' && key !== 'custom_plugin_name' && key !== 'temp_import_data') {
-                saveData[key] = localStorage.getItem(key);
-            }
-        }
-        const jsonString = JSON.stringify(saveData);
-        document.getElementById('export-textarea').value = jsonString;
-        document.getElementById('export-text-container').style.display = 'block';
-        if (navigator.clipboard) navigator.clipboard.writeText(jsonString);
-        alert('存檔已導出並複製到剪貼簿！');
-    }
-
+    // 3. 清除自訂外掛
     function clearCustomPlugin() {
         localStorage.removeItem('custom_plugin_code');
         localStorage.removeItem('custom_plugin_name');
@@ -256,19 +210,49 @@
         alert('已清除自訂外掛設定！');
     }
 
-    // 3. 啟動遊戲與自動解包注入
+    // 4. 核心遊戲啟動與外掛注入邏輯
     function launchGame() {
         const targetUrl = document.getElementById('server-select').value;
-        const tempData = localStorage.getItem('temp_import_data');
 
-        // 將存檔數據攜帶於 URL 參數跳轉，解決 file:// 與 https:// 跨域問題
-        let destination = targetUrl;
-        if (tempData) {
-            const sep = destination.includes('?') ? '&' : '?';
-            destination += sep + 'force_save=' + encodeURIComponent(tempData);
+        // 純淨模式直接跳轉網址（100% 讀取該網址下原有的角色存檔）
+        if (targetUrl.includes('mode=clean')) {
+            window.location.href = targetUrl;
+            return;
         }
 
-        window.location.href = destination;
+        // --- 1. 載入主外掛 ---
+        const s1 = document.createElement('script');
+        s1.src = 'https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';
+        document.head.appendChild(s1);
+
+        // --- 2. 延遲 0.5 秒載入 GM 商店 ---
+        setTimeout(() => {
+            const s2 = document.createElement('script');
+            s2.src = 'https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now();
+            document.head.appendChild(s2);
+        }, 500);
+
+        // --- 3. 限定 shines871 網域時載入離線掛機外掛 (offline.js) ---
+        if (targetUrl.includes('shines871.github.io')) {
+            setTimeout(() => {
+                const sOffline = document.createElement('script');
+                sOffline.src = 'https://pp771007.github.io/idle-lineage-class/offline.js?t=' + Date.now();
+                document.head.appendChild(sOffline);
+            }, 700);
+        }
+
+        // --- 4. 注入玩家自訂本地外掛 ---
+        const customCode = localStorage.getItem('custom_plugin_code');
+        if (customCode) {
+            setTimeout(() => {
+                const s3 = document.createElement('script');
+                s3.textContent = customCode;
+                document.head.appendChild(s3);
+            }, 1000);
+        }
+
+        // 完成外掛掛載後跳轉前往遊戲網頁
+        window.location.href = targetUrl;
     }
 </script>
 
