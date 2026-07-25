@@ -125,7 +125,7 @@
     <div class="form-group">
         <label for="server-select">🌐 選擇伺服器與模式：</label>
         <select id="server-select">
-            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 雙外掛模式)</option>
+            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 增強外掛/掛機模式)</option>
             <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛模式)</option>
             <option value="https://shines871.github.io/idle-lineage-class/?mode=clean">原版純淨模式 (100% 無外掛)</option>
         </select>
@@ -205,27 +205,35 @@
             return;
         }
 
-        // --- 注入雙外掛邏輯 ---
-        // 載入主外掛
+        // --- 1. 載入主外掛 ---
         const s1 = document.createElement('script');
         s1.src = 'https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';
         document.head.appendChild(s1);
 
-        // 延遲 0.5 秒載入 GM 商店（防止 iOS 衝突）
+        // --- 2. 延遲 0.5 秒載入 GM 商店 ---
         setTimeout(() => {
             const s2 = document.createElement('script');
             s2.src = 'https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now();
             document.head.appendChild(s2);
         }, 500);
 
-        // --- 注入玩家自訂本地外掛 ---
+        // --- 3. 限定 shines871 網域時載入離線掛機外掛 (offline.js) ---
+        if (targetUrl.includes('shines871.github.io')) {
+            setTimeout(() => {
+                const sOffline = document.createElement('script');
+                sOffline.src = 'https://pp771007.github.io/idle-lineage-class/offline.js?t=' + Date.now();
+                document.head.appendChild(sOffline);
+            }, 700);
+        }
+
+        // --- 4. 注入玩家自訂本地外掛 ---
         const customCode = localStorage.getItem('custom_plugin_code');
         if (customCode) {
             setTimeout(() => {
                 const s3 = document.createElement('script');
                 s3.textContent = customCode;
                 document.head.appendChild(s3);
-            }, 800);
+            }, 1000);
         }
 
         // 完成外掛掛載後跳轉前往遊戲網頁
