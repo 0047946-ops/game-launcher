@@ -3,18 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- 強效網頁防快取標籤 -->
+    <!-- 強效防快取標籤 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>放置天堂 - 萬能啟動器</title>
+    <title>放置天堂 - 商業級全能啟動器</title>
     <style>
         :root {
-            --bg-color: #121212;
-            --card-bg: #1e1e1e;
+            --bg-color: #0d0d0d;
+            --card-bg: #181818;
             --accent-color: #f39c12;
+            --accent-hover: #d35400;
             --text-color: #e0e0e0;
-            --border-color: #333;
+            --border-color: #2c2c2c;
+            --danger-color: #e74c3c;
+            --success-color: #2ecc71;
         }
 
         html, body {
@@ -24,173 +27,279 @@
             padding: 0;
             background-color: var(--bg-color);
             color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            overflow: hidden;
-        }
-
-        .launcher-container {
-            width: 100%;
-            max-width: 480px;
-            margin: 40px auto;
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             box-sizing: border-box;
         }
 
-        h1 {
-            font-size: 1.4rem;
+        .launcher-card {
+            width: 92%;
+            max-width: 460px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+            box-sizing: border-box;
+            margin: 20px 0;
+        }
+
+        .header-title {
+            font-size: 1.5rem;
             text-align: center;
             color: var(--accent-color);
-            margin-top: 0;
-            margin-bottom: 20px;
+            margin: 0 0 20px 0;
+            font-weight: 800;
+            letter-spacing: 1px;
         }
 
         .form-group {
             margin-bottom: 18px;
         }
 
-        label {
+        .form-label {
             display: block;
-            font-weight: bold;
+            font-weight: 700;
             margin-bottom: 8px;
             font-size: 0.95rem;
+            color: #bbb;
         }
 
-        select {
+        .custom-select, .custom-input {
             width: 100%;
-            padding: 12px;
-            border-radius: 6px;
+            padding: 12px 14px;
+            border-radius: 8px;
             border: 1px solid var(--border-color);
-            background-color: #2a2a2a;
+            background-color: #242424;
             color: #fff;
             box-sizing: border-box;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .custom-select:focus, .custom-input:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* 腳本管理區塊 */
+        .plugin-section {
+            border: 1px dashed var(--border-color);
+            padding: 14px;
+            border-radius: 10px;
+            background-color: #121212;
+            margin-bottom: 18px;
+        }
+
+        .plugin-list {
+            max-height: 120px;
+            overflow-y: auto;
+            margin-top: 10px;
+            padding-right: 4px;
+        }
+
+        .plugin-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #222;
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 0.82rem;
+            border: 1px solid #333;
+        }
+
+        .plugin-url {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 80%;
+            color: #ddd;
+        }
+
+        .btn-delete {
+            background: var(--danger-color);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+
+        .btn-add {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            color: var(--accent-color);
+            border: 1px solid var(--accent-color);
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            cursor: pointer;
+            margin-top: 8px;
         }
 
         .btn-launch {
             width: 100%;
-            padding: 14px;
-            background-color: var(--accent-color);
+            padding: 15px;
+            background: linear-gradient(135deg, #f39c12, #e67e22);
             color: #000;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 1.1rem;
-            font-weight: bold;
+            font-weight: 800;
             cursor: pointer;
-            margin-top: 15px;
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
         }
 
-        .btn-launch:hover {
-            background-color: #d35400;
-            color: #fff;
-        }
-
-        /* 遊戲同域全螢幕框架 */
-        #game-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 9999;
+        .system-status {
+            margin-top: 16px;
+            font-size: 0.82rem;
+            color: #777;
+            text-align: center;
+            line-height: 1.4;
         }
     </style>
 </head>
 <body>
 
-<!-- 1. 啟動器介面 -->
-<div id="launcher-view" class="launcher-container">
-    <h1>⚔️ 放置天堂萬能啟動器</h1>
+<div class="launcher-card">
+    <h1 class="header-title">⚔️ 放置天堂萬能啟動器</h1>
 
+    <!-- 1. 伺服器選擇 -->
     <div class="form-group">
-        <label for="server-select">🌐 選擇伺服器與模式：</label>
-        <select id="server-select">
-            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛模式)</option>
-            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 增強外掛/掛機模式)</option>
+        <label class="form-label" for="server-select">🌐 選擇運行伺服器節點：</label>
+        <select id="server-select" class="custom-select">
+            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛 / 自動同步模式)</option>
+            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 增強外掛 / 自動同步模式)</option>
         </select>
     </div>
 
-    <button class="btn-launch" onclick="launchGame()">🚀 直接載入進入遊戲</button>
+    <!-- 2. 玩家自訂外掛腳本管理區 -->
+    <div class="plugin-section">
+        <label class="form-label" style="margin-bottom: 4px;">🧩 玩家自訂外掛腳本管理：</label>
+        
+        <input type="text" id="custom-plugin-input" class="custom-input" placeholder="貼上自訂腳本網址 (https://...)">
+        <button class="btn-add" onclick="addCustomPlugin()">➕ 新增外掛腳本</button>
+
+        <div id="plugin-list-container" class="plugin-list">
+            <!-- 腳本清單動態生成於此 -->
+        </div>
+    </div>
+
+    <!-- 3. 啟動按鈕 -->
+    <button class="btn-launch" onclick="executeEngineLaunch()">🚀 啟動遊戲並載入外掛</button>
+
+    <div id="status-display" class="system-status">內部版本 v1.2.0 | 自訂腳本模組已就緒</div>
 </div>
 
-<!-- 2. 全螢幕遊戲無縫載入容器 -->
-<iframe id="game-frame"></iframe>
-
 <script>
-    // 定義當前本地 APK 版本號
-    const CURRENT_APK_VERSION = "1.2.0";
+    const SYSTEM_VERSION = "1.2.0";
+    const CONFIG_ENDPOINT = "https://0047946-ops.github.io/game-launcher/version.json";
+    const STORAGE_KEY_PLUGINS = "USER_CUSTOM_PLUGINS";
 
-    // 0. 自動檢查版本號與防快取機制
-    (function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (!urlParams.has('v')) {
-            const separator = window.location.href.includes('?') ? '&' : '?';
-            window.location.replace(window.location.href + separator + 'v=' + Date.now());
+    // 0. 初始化自訂外掛清單
+    document.addEventListener("DOMContentLoaded", () => {
+        renderPluginList();
+    });
+
+    // 1. 讀取並渲染已儲存的自訂外掛腳本
+    function getStoredPlugins() {
+        try {
+            const data = localStorage.getItem(STORAGE_KEY_PLUGINS);
+            return data ? JSON.parse(data) : [];
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function renderPluginList() {
+        const container = document.getElementById('plugin-list-container');
+        const plugins = getStoredPlugins();
+        container.innerHTML = "";
+
+        if (plugins.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:#555; font-size:0.8rem; padding:8px;">無自訂腳本 (預設載入系統官方外掛)</div>`;
             return;
         }
 
-        // 讀取遠端 version.json 檔進行版本比對
-        fetch('https://0047946-ops.github.io/game-launcher/version.json?t=' + Date.now())
+        plugins.forEach((url, index) => {
+            const item = document.createElement('div');
+            item.className = 'plugin-item';
+            item.innerHTML = `
+                <span class="plugin-url" title="${url}">${url}</span>
+                <button class="btn-delete" onclick="removeCustomPlugin(${index})">刪除</button>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    // 2. 新增玩家輸入的外掛腳本
+    function addCustomPlugin() {
+        const input = document.getElementById('custom-plugin-input');
+        const url = input.value.trim();
+
+        if (!url || !url.startsWith('http')) {
+            alert('請輸入有效的 HTTP / HTTPS 腳本網址！');
+            return;
+        }
+
+        const plugins = getStoredPlugins();
+        if (plugins.includes(url)) {
+            alert('該腳本網址已存在！');
+            return;
+        }
+
+        plugins.push(url);
+        localStorage.setItem(STORAGE_KEY_PLUGINS, JSON.stringify(plugins));
+        input.value = "";
+        renderPluginList();
+    }
+
+    // 3. 刪除指定腳本
+    function removeCustomPlugin(index) {
+        const plugins = getStoredPlugins();
+        plugins.splice(index, 1);
+        localStorage.setItem(STORAGE_KEY_PLUGINS, JSON.stringify(plugins));
+        renderPluginList();
+    }
+
+    // 4. 版本自動檢查
+    (function initializeArchitecture() {
+        const currentUrl = new URL(window.location.href);
+        if (!currentUrl.searchParams.has('v')) {
+            currentUrl.searchParams.set('v', Date.now().toString());
+            window.location.replace(currentUrl.toString());
+            return;
+        }
+
+        fetch(`${CONFIG_ENDPOINT}?t=${Date.now()}`)
             .then(res => res.json())
             .then(data => {
-                if (data.latestVersion && data.latestVersion !== CURRENT_APK_VERSION) {
-                    if (confirm(`🎉 發現新版本 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即前往下載最新版？`)) {
+                if (data.latestVersion && data.latestVersion !== SYSTEM_VERSION) {
+                    if (confirm(`🎉 發現最新系統版本 (v${data.latestVersion})！\n\n更新說明：\n${data.updateLog || '無'}\n\n是否立即進行升級更新？`)) {
                         window.location.href = data.downloadUrl;
                     }
                 }
             })
-            .catch(err => {
-                console.log('版本號檢查跳過或失敗：', err);
-            });
+            .catch(() => {});
     })();
 
-    // 1. 核心啟動與注入邏輯
-    function launchGame() {
-        const targetUrl = document.getElementById('server-select').value;
-        const launcherContainer = document.getElementById('launcher-view');
-        const gameFrame = document.getElementById('game-frame');
+    // 5. 啟動並預備注入自訂外掛鏈
+    function executeEngineLaunch() {
+        const targetServerUrl = document.getElementById('server-select').value;
+        const statusElement = document.getElementById('status-display');
+        
+        statusElement.innerText = "正在為目標伺服器掛載自訂外掛鏈與寫入存檔...";
+        statusElement.style.color = "#f39c12";
 
-        // 隱藏啟動器選單，顯示全螢幕遊戲框架
-        launcherContainer.style.display = 'none';
-        gameFrame.style.display = 'block';
-
-        // 直接將目標伺服器網址載入至同域容器中
-        gameFrame.src = targetUrl;
-
-        // 監聽框架載入完成後自動注入外掛
-        gameFrame.onload = function() {
-            try {
-                const frameDoc = gameFrame.contentDocument || gameFrame.contentWindow.document;
-
-                // 注入主外掛
-                const s1 = frameDoc.createElement('script');
-                s1.src = 'https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';
-                frameDoc.head.appendChild(s1);
-
-                // 注入 GM 商店
-                setTimeout(() => {
-                    const s2 = frameDoc.createElement('script');
-                    s2.src = 'https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t=' + Date.now();
-                    frameDoc.head.appendChild(s2);
-                }, 500);
-
-                // 伺服器一專用離線掛機外掛
-                if (targetUrl.includes('shines871.github.io')) {
-                    setTimeout(() => {
-                        const sOffline = frameDoc.createElement('script');
-                        sOffline.src = 'https://pp771007.github.io/idle-lineage-class/offline.js?t=' + Date.now();
-                        frameDoc.head.appendChild(sOffline);
-                    }, 700);
-                }
-            } catch (e) {
-                console.log("外掛已隨同域遊戲核心原生加載完成。");
-            }
-        };
+        setTimeout(() => {
+            window.location.href = targetServerUrl;
+        }, 300);
     }
 </script>
 
