@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 強效網頁防快取標籤（避免 App 讀取舊資料） -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>放置天堂 - 跨平台萬能啟動器</title>
     <style>
         :root {
@@ -121,8 +125,8 @@
     <div class="form-group">
         <label for="server-select">🌐 選擇伺服器與模式：</label>
         <select id="server-select">
-            <option value="https://shines871.github.io/idle-lineage-class/">伺服器二 (shines871 - 雙外掛模式)</option>
-            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器一 (pp771007 - 雙外掛模式)</option>
+            <option value="https://shines871.github.io/idle-lineage-class/">伺服器一 (shines871 - 雙外掛模式)</option>
+            <option value="https://pp771007.github.io/idle-lineage-class/">伺服器二 (pp771007 - 雙外掛模式)</option>
             <option value="https://shines871.github.io/idle-lineage-class/?mode=clean">原版純淨模式 (100% 無外掛)</option>
         </select>
     </div>
@@ -140,6 +144,16 @@
 </div>
 
 <script>
+    // 0. 強制防快取跳轉機制（確保 App 每次開啟都是最新的介面）
+    (function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.has('v')) {
+            const separator = window.location.href.includes('?') ? '&' : '?';
+            const newUrl = window.location.href + separator + 'v=' + Date.now();
+            window.location.replace(newUrl);
+        }
+    })();
+
     // 1. 初始化檢查 LocalStorage 是否有記憶的自訂外掛
     window.addEventListener('DOMContentLoaded', () => {
         const savedPlugin = localStorage.getItem('custom_plugin_code');
