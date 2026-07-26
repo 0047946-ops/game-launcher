@@ -1,19 +1,28 @@
-package com.example.idlelineageapp; // ⚠️ 請確認與您專案的 AndroidManifest.xml 套件名稱一致
+package com.example.idlelineageapp;
 
 import android.app.AlertDialog;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.URLUtil;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -31,6 +40,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -38,8 +48,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -50,11 +64,11 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_CURRENT_VERSION = "current_version";
     private static final String GITHUB_RELEASE_API = "https://api.github.com/repos/pp771007/idle-lineage-class/releases/latest";
 
-    // 🌐 我們研究的雙網址架構（原作者 / 加掛版）
+    // 🌐 [我們研究成果植入] 雙網址支援（原作者正式版 / 加掛擴充版）
     private static final String URL_ORIGINAL_GAME = "https://shines871.github.io/idle-lineage-class/";
     private static final String URL_MODDED_GAME = "https://pp771007.github.io/idle-lineage-class/";
 
-    // 🚀 我們建置的三大 GitHub 雲端基地網址
+    // 🚀 [我們研究成果植入] 三大 GitHub 雲端後勤基地網址
     private static final String URL_RELEASE_JSON = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/release.json";
     private static final String URL_SAVE_HOOK = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/save_hook.js";
     private static final String URL_MASTER_ENGINE = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/scripts/main.user.js";
@@ -76,7 +90,10 @@ public class MainActivity extends AppCompatActivity {
     private byte[] pendingSaveBytes = null;
     private String pendingSaveFileName = null;
 
+    /** 匯出檔名前綴。留空 = 不加前綴（檔名最短）；想加就填，例如 "放置天堂" */
     private static final String SAVE_NAME_PREFIX = "";
+    /** assets/save_hook.js 的內容快取 */
+    private String saveHookJs = null;
 
     @Keep
     public class WebAppInterface {
@@ -87,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> processAndSaveFile(dataUrlOrBase64, mimeType, fileName));
         }
 
+        /** JS 端攔不到下載時，把 localStorage 裡找到的所有存檔丟回來讓玩家自己選 */
         @JavascriptInterface
         @Keep
         public void pickSaveSlot(String slotsJson) {
@@ -109,20 +127,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-        // 🛡️ 使用安全尋找資源的方式，確保就算 XML 稍微有落差也不會編譯失敗
-        setContentView(getResId("layout", "activity_main"));
-
-        webView = findViewById(getResId("id", "webView"));
-        layoutLoading = findViewById(getResId("id", "layoutLoading"));
-        progressBar = findViewById(getResId("id", "progressBar"));
-        tvLoadingStatus = findViewById(getResId("id", "tvLoadingStatus"));
-
-        // 若 xml 裡沒有 layoutLoading，則容錯建立 fallback WebView
-        if (webView == null) {
-            webView = new WebView(this);
-            setContentView(webView);
-        }
+        webView = findViewById(R.id.webView);
+        layoutLoading = findViewById(R.id.layoutLoading);
+        progressBar = findViewById(R.id.progressBar);
+        tvLoadingStatus = findViewById(R.id.tvLoadingStatus);
 
         gameDir = new File(getFilesDir(), "game");
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
@@ -133,17 +143,10 @@ public class MainActivity extends AppCompatActivity {
         setupWebView();
 
         executor.execute(() -> {
+            initGameAssetsIfNeeded();
             loadGameInWebView();
             checkForUpdates();
         });
-    }
-
-    private int getResId(String resType, String resName) {
-        try {
-            return getResources().getIdentifier(resName, resType, getPackageName());
-        } catch (Exception e) {
-            return 0;
-        }
     }
 
     private void setupWebView() {
@@ -192,9 +195,9 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    Log.d(TAG, "頁面載入完成，開始注入我們的三大雲端基地腳本: " + url);
+                    Log.d(TAG, "頁面載入完成: " + url);
                     
-                    // 🎯 自動雙向注入我們的靈魂腳本
+                    // 🎯 [我們研究成果植入] 自動注入雲端 SaveHook 與 Master Engine 擴充引擎
                     injectRemoteScript(view, URL_SAVE_HOOK);
                     injectRemoteScript(view, URL_MASTER_ENGINE);
                 }
@@ -202,6 +205,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // 🎯 [我們研究成果植入] 動態腳本注入方法
     private void injectRemoteScript(WebView view, String scriptUrl) {
         String js = "javascript:(function(){" +
                 "var s=document.createElement('script');" +
@@ -239,6 +243,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void initGameAssetsIfNeeded() {
+        // 預留資產初始化
+    }
+
     private void loadGameInWebView() {
         mainHandler.post(() -> {
             File indexFile = new File(gameDir, "index.html");
@@ -254,15 +262,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkForUpdates() {
         try {
-            Log.d(TAG, "讀取雲端基地 release.json 配置: " + URL_RELEASE_JSON);
+            // 🌐 [我們研究成果植入] 讀取雲端基地 release.json 配置
+            Log.d(TAG, "檢查雲端基地 release.json 配置: " + URL_RELEASE_JSON);
             URL releaseUrl = new URL(URL_RELEASE_JSON);
             HttpURLConnection releaseConn = (HttpURLConnection) releaseUrl.openConnection();
             releaseConn.setConnectTimeout(3000);
             if (releaseConn.getResponseCode() == 200) {
-                Log.d(TAG, "✅ 雲端基地連線正常，後勤腳本同步中");
+                Log.d(TAG, "✅ 雲端基地連線正常");
             }
 
-            Log.d(TAG, "檢查 GitHub Release 最新版本...");
+            Log.d(TAG, "檢查 GitHub 最新版本...");
             URL url = new URL(GITHUB_RELEASE_API);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
@@ -279,10 +288,10 @@ public class MainActivity extends AppCompatActivity {
                 String latestVersion = json.getString("tag_name");
                 String currentVersion = prefs.getString(KEY_CURRENT_VERSION, "");
 
-                Log.d(TAG, "最新版本: " + latestVersion + " | 當前本地版本: " + currentVersion);
+                Log.d(TAG, "最新版本: " + latestVersion + " | 當前版本: " + currentVersion);
 
                 if (!latestVersion.equals(currentVersion)) {
-                    showLoadingUI("發現新版本 (" + latestVersion + ")，準備下載熱更新包...");
+                    showLoadingUI("發現新版本 (" + latestVersion + ")，準備下載...");
 
                     String zipUrl = json.getString("zipball_url");
                     File downloadedZip = new File(getCacheDir(), "update.zip");
@@ -296,16 +305,16 @@ public class MainActivity extends AppCompatActivity {
 
                         prefs.edit().putString(KEY_CURRENT_VERSION, latestVersion).apply();
 
-                        showToast("熱更新完成！正在重新載入遊戲...");
+                        showToast("更新完成！正在載入新版遊戲...");
                         loadGameInWebView();
                     } else {
-                        showToast("熱更新下載失敗，將自動載入線上版本。");
+                        showToast("更新下載失敗，將繼續使用現有版本。");
                         hideLoadingUI();
                     }
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "熱更新檢查發生異常", e);
+            Log.e(TAG, "熱更新檢查失敗", e);
             hideLoadingUI();
         }
     }
@@ -327,7 +336,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (responseCode != HttpURLConnection.HTTP_OK) {
-                Log.e(TAG, "下載服務器返回錯誤碼: " + responseCode);
+                Log.e(TAG, "伺服器回傳 HTTP 錯誤: " + responseCode);
                 return false;
             }
 
@@ -348,16 +357,16 @@ public class MainActivity extends AppCompatActivity {
                         int progress = (int) (total * 100 / fileLength);
                         if (progress != lastProgress) {
                             lastProgress = progress;
-                            updateProgressUI("下載熱更新包中 (" + progress + "%)...", progress);
+                            updateProgressUI("下載更新包中 (" + progress + "%)...", progress);
                         }
                     } else {
-                        updateProgressUI("下載熱更新包中 (" + (total / 1024) + " KB)...", -1);
+                        updateProgressUI("下載更新包中 (" + (total / 1024) + " KB)...", -1);
                     }
                 }
             }
             return true;
         } catch (Exception e) {
-            Log.e(TAG, "下載檔案時發生例外", e);
+            Log.e(TAG, "下載更新包過程發生異常", e);
             return false;
         }
     }
