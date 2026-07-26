@@ -2,10 +2,8 @@ package com.idle.lineage.launcher;
 
 import android.app.Activity;
 import android.app.DownloadManager;
-import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,8 +14,6 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -34,11 +30,6 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private final static int FILE_CHOOSER_RESULT_CODE = 10001;
-    private static final String PREF_NAME = "IdleLineageSaveData";
-    private static final String KEY_SAVE_JSON = "player_save_json";
-    private static final String KEY_GAME_URL = "custom_game_url";
-    
-    private static final String DEFAULT_GAME_URL = "https://pp771007.github.io/";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +56,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 原生下載監聽器（處理一般非 Blob 連結）
+        // 處理一般下載觸發
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -81,15 +72,16 @@ public class MainActivity extends Activity {
 
                     DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                     dm.enqueue(request);
-                    Toast.makeText(this, "📥 已開始匯出存檔：" + fileName, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "📥 已開始下載存檔：" + fileName, Toast.LENGTH_SHORT).show();
                 }
             } catch (Exception e) {
-                Toast.makeText(this, "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "❌ 下載失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
+        // 讓遊戲點擊「匯入進度」時能正確開啟手機系統檔案選擇器
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
@@ -113,7 +105,7 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                Toast.makeText(MainActivity.this, "⚠️ 網頁載入失敗，請確認網路連線或網址正確性", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "⚠️ 網頁載入失敗，請確認網路連線", Toast.LENGTH_LONG).show();
             }
 
             @Override
@@ -121,9 +113,7 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 
                 if (url != null && url.startsWith("http")) {
-                    SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-                    
-                    // 1. 自動載入雙外掛腳本
+                    // 1. 自動注入雙外掛
                     String js1 = "if(!window.__main_plugin_loaded){window.__main_plugin_loaded=true;" +
                             "var s1=document.createElement('script');" +
                             "s1.src='https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';" +
@@ -137,42 +127,12 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 自動灌入外部存檔到遊戲 localStorage
-                    String localJson = sp.getString(KEY_SAVE_JSON, "");
-                    if (!localJson.isEmpty()) {
-                        String safeJson = localJson.replace("'", "\\'").replace("\n", "").replace("\r", "");
-                        String syncJs = "(function(){" +
-                                "try {" +
-                                "  localStorage.setItem('RAW_INJECT_SAVE_DATA', '" + safeJson + "');" +
-                                "  localStorage.setItem('fable5_save', '" + safeJson + "');" +
-                                "  localStorage.setItem('save_data', '" + safeJson + "');" +
-                                "} catch(e){}" +
-                                "})()";
-                        view.evaluateJavascript(syncJs, null);
-                    }
-
-                    // 3. 背景每 3 秒備份存檔
-                    String autoSyncBackJs = "(function(){" +
-                            "if(window.__sync_listener_active) return;" +
-                            "window.__sync_listener_active = true;" +
-                            "setInterval(function(){" +
-                            "  try {" +
-                            "    var data = localStorage.getItem('fable5_save') || localStorage.getItem('RAW_INJECT_SAVE_DATA') || localStorage.getItem('save_data');" +
-                            "    if(data && data.length > 20){" +
-                            "      AndroidBridge.saveGameDataSilent(data);" +
-                            "    }" +
-                            "  }catch(e){}" +
-                            "}, 3000);" +
-                            "})()";
-                    view.evaluateJavascript(autoSyncBackJs, null);
-
-                    // 4. 🔥 核心亮點：重寫網頁 Blob 下載與 URL.createObjectURL，專治人物選擇畫面的匯出！
+                    // 2. 重寫 Blob 與 下載攔截，確保人物選擇畫面的「匯出進度」運作
                     String overrideBlobDownloadJs =
                         "(function(){" +
                         "if(window.__blob_override_active) return;" +
                         "window.__blob_override_active = true;" +
                         
-                        // 攔截 HTML5 點擊下載事件
                         "document.addEventListener('click', function(e){" +
                         "  var target = e.target.closest && e.target.closest('a');" +
                         "  if(target && target.href){" +
@@ -188,14 +148,11 @@ public class MainActivity extends Activity {
                         "          AndroidBridge.saveBase64File(base64, fileName);" +
                         "        };" +
                         "        reader.readAsDataURL(blob);" +
-                        "      }).catch(function(err){" +
-                        "        AndroidBridge.exportNativeSave();" +
-                        "      });" +
+                        "      }).catch(function(err){});" +
                         "    }" +
                         "  }" +
                         "}, true);" +
 
-                        // 重寫 URL.createObjectURL，捕捉動態生成的下載檔
                         "var originalCreateObjectURL = URL.createObjectURL;" +
                         "URL.createObjectURL = function(blob){" +
                         "  var url = originalCreateObjectURL.apply(this, arguments);" +
@@ -216,36 +173,37 @@ public class MainActivity extends Activity {
             }
         });
 
-        handleExternalFileIntent(getIntent());
-        
         loadNativeLauncherHtml();
     }
 
+    // 載入伺服器選擇選單 UI
     private void loadNativeLauncherHtml() {
-        SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        String savedUrl = sp.getString(KEY_GAME_URL, DEFAULT_GAME_URL);
-
         String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
                 "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
                 "<style>" +
-                "body{background:#121212;color:#fff;font-family:sans-serif;padding:20px;text-align:center;}" +
-                "h2{color:#4CAF50;margin-top:30px;}" +
-                ".btn{display:block;width:100%;padding:15px 0;margin:12px 0;background:#1e88e5;color:#fff;" +
-                "border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;}" +
-                ".btn-export{background:#43a047;}" +
-                "input[type='text']{width:90%;padding:10px;margin:10px 0;border-radius:5px;border:none;}" +
+                "body{background:#121212;color:#fff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;padding:20px;display:flex;justify-content:center;align-items:center;min-height:90vh;margin:0;}" +
+                ".card{background:#1e1e1e;border-radius:16px;padding:24px;width:100%;max-width:380px;box-shadow:0 8px 24px rgba(0,0,0,0.5);text-align:center;box-sizing:border-box;}" +
+                "h2{font-size:20px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px;}" +
+                ".subtitle{color:#8e8e93;font-size:13px;margin-bottom:24px;}" +
+                ".label{color:#4cd964;font-size:14px;text-align:left;margin-bottom:8px;font-weight:bold;}" +
+                "select{width:100%;padding:12px;background:#2c2c2e;color:#fff;border:1px solid #3a3a3c;border-radius:8px;font-size:15px;margin-bottom:24px;outline:none;}" +
+                ".btn-start{width:100%;padding:14px;background:#28a745;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 12px rgba(40,167,69,0.3);}" +
+                ".btn-start:active{background:#218838;}" +
                 "</style></head><body>" +
-                "<h2>天堂放置版 雙外掛啟動器</h2>" +
-                "<button class='btn' onclick='location.href=\"" + savedUrl + "\"'>🚀 開始遊戲</button>" +
-                "<button class='btn btn-export' onclick='AndroidBridge.exportNativeSave()'>💾 匯出最新存檔 (.json)</button>" +
-                "<br><hr style='border-color:#333;'><br>" +
-                "<label>遊戲目標網址設置：</label>" +
-                "<input type='text' id='gameUrl' value='" + savedUrl + "'>" +
-                "<button class='btn' style='background:#757575;' onclick='saveUrl()'>儲存網址設定</button>" +
+                "<div class='card'>" +
+                "  <h2>🎮 放置天堂雙外掛啟動器</h2>" +
+                "  <div class='subtitle'>Android 原生 WebView 注入版</div>" +
+                "  <div class='label'>選擇遊戲伺服器：</div>" +
+                "  <select id='serverSelect'>" +
+                "    <option value='https://pp771007.github.io/'>伺服器一 (pp771007)</option>" +
+                "    <option value='https://shines871.github.io/'>伺服器二 (shines871)</option>" +
+                "  </select>" +
+                "  <button class='btn-start' onclick='launchGame()'>🚀 啟動遊戲並載入雙外掛</button>" +
+                "</div>" +
                 "<script>" +
-                "function saveUrl(){" +
-                "  var val = document.getElementById('gameUrl').value;" +
-                "  AndroidBridge.saveGameUrl(val);" +
+                "function launchGame(){" +
+                "  var url = document.getElementById('serverSelect').value;" +
+                "  location.href = url;" +
                 "}" +
                 "</script>" +
                 "</body></html>";
@@ -290,32 +248,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void handleExternalFileIntent(Intent intent) {
-        if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
-            Uri uri = intent.getData();
-            if (uri != null) {
-                try {
-                    InputStream inputStream = getContentResolver().openInputStream(uri);
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        sb.append(line);
-                    }
-                    inputStream.close();
-                    
-                    String jsonContent = sb.toString();
-                    getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-                            .edit().putString(KEY_SAVE_JSON, jsonContent).apply();
-                    
-                    Toast.makeText(this, "✅ 已成功讀入外部 .json 存檔！", Toast.LENGTH_LONG).show();
-                } catch (Exception e) {
-                    Toast.makeText(this, "❌ 讀取外部檔案失敗：" + e.getMessage(), Toast.LENGTH_SHORT).show();
-                }
-            }
-        }
-    }
-
     private String guessFileName(String contentDisposition, String url) {
         String fileName = "fable5_save_" + System.currentTimeMillis() + ".json";
         try {
@@ -343,59 +275,12 @@ public class MainActivity extends Activity {
                     fos.write(bytes);
                     fos.close();
                     Toast.makeText(MainActivity.this,
-                            "✅ 人物存檔已成功匯出至 Download 資料夾：\n" + fileName, Toast.LENGTH_LONG).show();
+                            "✅ 角色存檔已成功匯出至 Download 資料夾：\n" + fileName, Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this,
                             "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
-        }
-
-        @JavascriptInterface
-        public void exportNativeSave() {
-            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            String jsonText = sp.getString(KEY_SAVE_JSON, "");
-            if (jsonText.isEmpty()) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "⚠️ 目前無暫存角色資料，請先開啟遊戲！", Toast.LENGTH_SHORT).show());
-                return;
-            }
-            try {
-                String base64 = Base64.encodeToString(jsonText.getBytes("UTF-8"), Base64.NO_WRAP);
-                saveBase64File(base64, "fable5_save_" + System.currentTimeMillis() + ".json");
-            } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_SHORT).show());
-            }
-        }
-
-        @JavascriptInterface
-        public void saveGameUrl(String newUrl) {
-            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            sp.edit().putString(KEY_GAME_URL, newUrl).apply();
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, "✅ 遊戲網址已更新！", Toast.LENGTH_SHORT).show());
-        }
-
-        @JavascriptInterface
-        public void saveGameDataSilent(String jsonText) {
-            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            sp.edit().putString(KEY_SAVE_JSON, jsonText).apply();
-        }
-
-        @JavascriptInterface
-        public String loadGameData() {
-            SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            return sp.getString(KEY_SAVE_JSON, "");
-        }
-
-        @JavascriptInterface
-        public String getClipboardText() {
-            try {
-                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (clipboard != null && clipboard.hasPrimaryClip() && clipboard.getPrimaryClip().getItemCount() > 0) {
-                    CharSequence text = clipboard.getPrimaryClip().getItemAt(0).getText();
-                    return text != null ? text.toString() : "";
-                }
-            } catch (Exception ignored) {}
-            return "";
         }
     }
 
@@ -407,13 +292,6 @@ public class MainActivity extends Activity {
             filePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
             filePathCallback = null;
         }
-    }
-
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        handleExternalFileIntent(intent);
     }
 
     @Override
