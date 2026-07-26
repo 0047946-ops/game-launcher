@@ -42,7 +42,6 @@ public class MainActivity extends Activity {
     private final static int FILE_CHOOSER_RESULT_CODE = 10001;
     private final static int CREATE_DOCUMENT_RESULT_CODE = 10002;
 
-    // 暫存待寫入的存檔資料（給 SAF 用）
     private byte[] pendingSaveBytes = null;
     private String pendingSaveFileName = null;
 
@@ -69,31 +68,43 @@ public class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-
-        // 允許背景播放音訊（防止 Android WebView 自動凍結 AudioContext 離線背景流）
         settings.setMediaPlaybackRequiresUserGesture(false);
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 監聽原生下載（處理標準 Blob 與一般存檔下載）
+        // ========== 下載監聽（已修正） ==========
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            Log.d(TAG, "DownloadListener 觸發: " + url);
             try {
                 if (url.startsWith("blob:")) {
                     triggerBlobDownload(url);
+                } else if (url.startsWith("data:")) {
+                    processAndSaveFile(url, mimetype != null ? mimetype : "application/json",
+                            guessFileName(contentDisposition, url));
                 } else {
-                    // 非 blob 的一般下載，改走強化後的處理流程
-                    processAndSaveFile(url, mimetype, guessFileName(contentDisposition, url));
+                    // 一般 http/https 下載 → 用原本可靠的 DownloadManager
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                    request.setMimeType(mimetype);
+                    request.addRequestHeader("User-Agent", userAgent);
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+
+                    String fileName = guessFileName(contentDisposition, url);
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+
+                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    dm.enqueue(request);
+                    Toast.makeText(this, "📥 已開始下載：" + fileName, Toast.LENGTH_SHORT).show();
                 }
             } catch (Exception e) {
+                Log.e(TAG, "DownloadListener 錯誤", e);
                 Toast.makeText(this, "❌ 下載失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        // 接管檔案選擇器，支援讀取本地存檔匯入
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
@@ -118,12 +129,14 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                if (url.startsWith("blob:") || url.startsWith("data:")) {
-                    if (url.startsWith("data:")) {
-                        processAndSaveFile(url, "application/json", null);
-                    } else {
-                        triggerBlobDownload(url);
-                    }
+                Log.d(TAG, "shouldOverrideUrlLoading: " + url);
+
+                if (url.startsWith("blob:")) {
+                    triggerBlobDownload(url);
+                    return true;
+                }
+                if (url.startsWith("data:")) {
+                    processAndSaveFile(url, "application/json", null);
                     return true;
                 }
                 return false;
@@ -131,7 +144,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                Toast.makeText(MainActivity.this, "⚠️ 網址連線失敗 (404)，請確認網路狀態", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "⚠️ 網址連線失敗，請確認網路狀態", Toast.LENGTH_LONG).show();
             }
 
             @Override
@@ -139,18 +152,17 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
 
                 if (url != null && url.startsWith("http")) {
-                    // 1. 自動注入【10 大外掛模組】(含主外掛 + 9個書籤模組)
+                    // ========== 1. 注入存檔匯出攔截 Hook（新增，解決匯出沒反應） ==========
+                    injectSaveExportHook(view);
+
+                    // ========== 2. 原本的 10 大外掛模組 ==========
                     String totalPluginJs = "(function () {" +
                             "'use strict';" +
                             "if(window.__all_plugins_loaded) return;" +
                             "window.__all_plugins_loaded = true;" +
-
-                            // 先載入原本的主外掛
                             "var s0 = document.createElement('script');" +
                             "s0.src = 'https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js?v=' + Date.now();" +
                             "document.body.appendChild(s0);" +
-
-                            // 接著依序載入 9 個書籤模組
                             "const b = 'https://kid0924.github.io/idle-lineage-class/';" +
                             "const t = window.location.hostname.includes('pp771007');" +
                             "const c = ['klh_initial.js','klh_GMShop.js','klh_mobile-perf.js','klh_perf-monitor.js','klh_Backpack.js','klh_pk.js','klh_Pandora.js'].map(x => b + x);" +
@@ -160,10 +172,7 @@ public class MainActivity extends Activity {
                             "    node.textContent = e;" +
                             "    node.style.cssText = 'position:fixed;top:20px;right:20px;background:' + (t ? '#2ecc71' : '#e74c3c') + ';color:white;padding:12px 24px;border-radius:8px;z-index:99999;font-family:sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:opacity 0.5s';" +
                             "    document.body.appendChild(node);" +
-                            "    setTimeout(() => {" +
-                            "        node.style.opacity = '0';" +
-                            "        setTimeout(() => node.remove(), 500);" +
-                            "    }, 2500);" +
+                            "    setTimeout(() => { node.style.opacity = '0'; setTimeout(() => node.remove(), 500); }, 2500);" +
                             "}" +
                             "function l(e) {" +
                             "    return new Promise((resolve, reject) => {" +
@@ -183,12 +192,11 @@ public class MainActivity extends Activity {
                             "})();";
                     view.evaluateJavascript(totalPluginJs, null);
 
-                    // 2. 自動注入【TMEngine v106.0 全域極致整合防斷線引擎】
+                    // ========== 3. TMEngine v106.0 ==========
                     String tmEngineJs = "(function() {" +
                             "'use strict';" +
                             "if(window.__tm_engine_loaded) return;" +
                             "window.__tm_engine_loaded = true;" +
-
                             "const PerformanceCore = {" +
                             "    initTuning: () => {" +
                             "        if (typeof window.requestIdleCallback !== 'undefined') {" +
@@ -200,15 +208,12 @@ public class MainActivity extends Activity {
                             "    }," +
                             "    getJitter: (base, variance) => base + Math.floor(Math.random() * variance)" +
                             "};" +
-
                             "PerformanceCore.initTuning();" +
-
                             "const originalSetInterval = window.setInterval;" +
                             "window.setInterval = function(callback, delay, ...args) {" +
                             "    const optimizedDelay = delay < 150 ? 150 : delay;" +
                             "    return originalSetInterval(callback, optimizedDelay, ...args);" +
                             "};" +
-
                             "const NetworkOptimizer = {" +
                             "    _isMobile: false," +
                             "    detectEnvironment: async () => {" +
@@ -225,7 +230,6 @@ public class MainActivity extends Activity {
                             "        return NetworkOptimizer._isMobile ? { base: 500, variance: 700 } : { base: 120, variance: 250 };" +
                             "    }" +
                             "};" +
-
                             "const DOMWatcher = {" +
                             "    waitForEl: (selector, success) => {" +
                             "        const el = document.querySelector(selector);" +
@@ -243,7 +247,6 @@ public class MainActivity extends Activity {
                             "        }" +
                             "    }" +
                             "};" +
-
                             "const GuildInterfaceOptimizer = {" +
                             "    isGuildActive: () => {" +
                             "        const guildPanel = document.querySelector('.guild-interface, .blood-pledge-panel, [data-view=\"guild\"]');" +
@@ -261,7 +264,6 @@ public class MainActivity extends Activity {
                             "        }" +
                             "    }" +
                             "};" +
-
                             "window.executeLogic = function() {" +
                             "    if (GuildInterfaceOptimizer.isGuildActive()) {" +
                             "        GuildInterfaceOptimizer.executeGuildLogic();" +
@@ -299,7 +301,6 @@ public class MainActivity extends Activity {
                             "        if (sellBtn && sellBtn.offsetParent !== null) sellBtn.click();" +
                             "    }" +
                             "};" +
-
                             "const PageVisibilityModule = {" +
                             "    init: () => {" +
                             "        document.addEventListener('visibilitychange', () => {" +
@@ -309,7 +310,6 @@ public class MainActivity extends Activity {
                             "        });" +
                             "    }" +
                             "};" +
-
                             "const HeartbeatModule = {" +
                             "    sendKeepAliveSignal: () => {" +
                             "        if (window.socket && window.socket.readyState === WebSocket.OPEN) {" +
@@ -319,7 +319,6 @@ public class MainActivity extends Activity {
                             "        }" +
                             "    }" +
                             "};" +
-
                             "const WebWorkerModule = {" +
                             "    init: () => {" +
                             "        if (!window.Worker) return;" +
@@ -341,7 +340,6 @@ public class MainActivity extends Activity {
                             "        };" +
                             "    }" +
                             "};" +
-
                             "const AudioKeepAliveModule = {" +
                             "    silentAudioCtx: null," +
                             "    init: () => {" +
@@ -363,23 +361,19 @@ public class MainActivity extends Activity {
                             "        } catch (e) {}" +
                             "    }" +
                             "};" +
-
                             "const initSystem = async () => {" +
                             "    await NetworkOptimizer.detectEnvironment();" +
                             "    PageVisibilityModule.init();" +
                             "    WebWorkerModule.init();" +
                             "    AudioKeepAliveModule.init();" +
-
                             "    const div = document.createElement('div');" +
                             "    div.style = 'position:fixed; top:10px; left:10px; background:rgba(0,0,0,0.85); color:#0f0; padding:10px; z-index:2147483647; border-radius:8px; font-size:11px; border:1px solid #0f0; pointer-events:none;';" +
                             "    div.innerHTML = `<div style=\"font-weight:bold;\">【TMEngine v106.0】全域極致整合防斷線版</div><div>● 背景抗凍結：四大模組運行中</div><div>● 模式：${NetworkOptimizer._isMobile ? '手機動態適配' : 'WIFI高速運行'}</div>`;" +
-
                             "    const attachUI = () => {" +
                             "        if (document.body) document.body.appendChild(div);" +
                             "        else setTimeout(attachUI, 100);" +
                             "    };" +
                             "    attachUI();" +
-
                             "    DOMWatcher.waitForEl('.attack-btn', () => {" +
                             "        setInterval(window.executeLogic, 250);" +
                             "    });" +
@@ -388,12 +382,11 @@ public class MainActivity extends Activity {
                             "})();";
                     view.evaluateJavascript(tmEngineJs, null);
 
-                    // 3. 核心檔案讀取修復：確保匯入不同來源/外掛格式的存檔時能自動解析相容
+                    // ========== 4. 存檔匯入修復 ==========
                     String fixImportJs =
                         "(function(){" +
                         "if(window.__fix_import_active) return;" +
                         "window.__fix_import_active = true;" +
-
                         "var originalReadAsText = FileReader.prototype.readAsText;" +
                         "FileReader.prototype.readAsText = function(file, encoding){" +
                         "  var self = this;" +
@@ -410,7 +403,6 @@ public class MainActivity extends Activity {
                         "  };" +
                         "  return originalReadAsText.apply(this, arguments);" +
                         "};" +
-
                         "})()";
                     view.evaluateJavascript(fixImportJs, null);
                 }
@@ -418,6 +410,49 @@ public class MainActivity extends Activity {
         });
 
         loadNativeLauncherHtml();
+    }
+
+    /** 新增：主動攔截常見的 blob / data 匯出行為 */
+    private void injectSaveExportHook(WebView view) {
+        String hookJs = "(function(){" +
+                "if(window.__save_export_hooked) return;" +
+                "window.__save_export_hooked = true;" +
+                "console.log('[SaveHook] 已啟動');" +
+
+                // 攔截 a[download] 的點擊
+                "document.addEventListener('click', function(e) {" +
+                "  var a = e.target.closest('a[download]');" +
+                "  if(!a) return;" +
+                "  var href = a.href || '';" +
+                "  if(href.startsWith('blob:') || href.startsWith('data:')) {" +
+                "    e.preventDefault();" +
+                "    e.stopPropagation();" +
+                "    console.log('[SaveHook] 攔截到 download 連結:', href.substring(0, 40));" +
+                "    if(href.startsWith('data:')) {" +
+                "      AndroidBridge.saveBase64File(href, a.download || 'save.json');" +
+                "    } else {" +
+                "      // blob 交給原生 triggerBlobDownload" +
+                "      AndroidBridge.triggerBlobFromJs(href, a.download || '');" +
+                "    }" +
+                "  }" +
+                "}, true);" +
+
+                // 攔截 window.open(blob) 這類行為（部分遊戲會用）" +
+                "var originalOpen = window.open;" +
+                "window.open = function(url) {" +
+                "  if(typeof url === 'string' && (url.startsWith('blob:') || url.startsWith('data:'))) {" +
+                "    console.log('[SaveHook] 攔截 window.open:', url.substring(0, 40));" +
+                "    if(url.startsWith('data:')) {" +
+                "      AndroidBridge.saveBase64File(url, 'save.json');" +
+                "    } else {" +
+                "      AndroidBridge.triggerBlobFromJs(url, '');" +
+                "    }" +
+                "    return null;" +
+                "  }" +
+                "  return originalOpen.apply(this, arguments);" +
+                "};" +
+                "})();";
+        view.evaluateJavascript(hookJs, null);
     }
 
     private void loadNativeLauncherHtml() {
@@ -454,20 +489,44 @@ public class MainActivity extends Activity {
         webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
     }
 
+    /** 強化版 blob 下載（失敗會顯示 Toast） */
     private void triggerBlobDownload(String blobUrl) {
-        String js = "javascript:(function(){" +
-                "var xhr=new XMLHttpRequest();" +
-                "xhr.open('GET','" + blobUrl + "',true);" +
-                "xhr.responseType='blob';" +
-                "xhr.onload=function(){" +
-                "  var reader=new FileReader();" +
-                "  reader.onloadend=function(){" +
-                "    var base64=reader.result.split(',')[1];" +
-                "    AndroidBridge.saveBase64File(base64,'fable5_save_" + System.currentTimeMillis() + ".json');" +
+        Log.d(TAG, "triggerBlobDownload: " + blobUrl);
+        String js = "(function(){" +
+                "try {" +
+                "  var xhr = new XMLHttpRequest();" +
+                "  xhr.open('GET', '" + blobUrl + "', true);" +
+                "  xhr.responseType = 'blob';" +
+                "  xhr.onload = function() {" +
+                "    if (xhr.status !== 200 && xhr.status !== 0) {" +
+                "      AndroidBridge.onExportError('XHR 狀態錯誤: ' + xhr.status);" +
+                "      return;" +
+                "    }" +
+                "    var reader = new FileReader();" +
+                "    reader.onloadend = function() {" +
+                "      try {" +
+                "        var base64 = reader.result.split(',')[1];" +
+                "        if (!base64) {" +
+                "          AndroidBridge.onExportError('讀取 base64 失敗');" +
+                "          return;" +
+                "        }" +
+                "        AndroidBridge.saveBase64File(base64, 'export_' + Date.now() + '.json');" +
+                "      } catch(e) {" +
+                "        AndroidBridge.onExportError('FileReader 錯誤: ' + e.message);" +
+                "      }" +
+                "    };" +
+                "    reader.onerror = function() {" +
+                "      AndroidBridge.onExportError('FileReader 失敗');" +
+                "    };" +
+                "    reader.readAsDataURL(xhr.response);" +
                 "  };" +
-                "  reader.readAsDataURL(xhr.response);" +
-                "};" +
-                "xhr.send();" +
+                "  xhr.onerror = function() {" +
+                "    AndroidBridge.onExportError('XHR 網路錯誤');" +
+                "  };" +
+                "  xhr.send();" +
+                "} catch(e) {" +
+                "  AndroidBridge.onExportError('triggerBlob 例外: ' + e.message);" +
+                "}" +
                 "})()";
         webView.evaluateJavascript(js, null);
     }
@@ -500,19 +559,15 @@ public class MainActivity extends Activity {
         return fileName;
     }
 
-    /* ==================== 強化存檔處理核心（來自 B 檔改良） ==================== */
+    /* ==================== 強化存檔處理核心 ==================== */
 
-    /**
-     * 統一處理各種來源的存檔資料（data:、純 JSON、Base64、SIG1: 等）
-     */
     private void processAndSaveFile(String dataUrlOrBase64, String mimeType, String fileName) {
         if (dataUrlOrBase64 == null || dataUrlOrBase64.isEmpty()) {
             return;
         }
 
-        // blob: 只是指標，Java 端讀不到內容，交給 triggerBlobDownload 處理
         if (dataUrlOrBase64.startsWith("blob:")) {
-            Log.w(TAG, "收到 blob: 網址，改由 triggerBlobDownload 處理");
+            Log.w(TAG, "processAndSaveFile 收到 blob，轉交給 triggerBlobDownload");
             triggerBlobDownload(dataUrlOrBase64);
             return;
         }
@@ -530,7 +585,6 @@ public class MainActivity extends Activity {
                 if (commaIndex != -1) {
                     String header = dataUrlOrBase64.substring(0, commaIndex);
                     String content = dataUrlOrBase64.substring(commaIndex + 1);
-
                     if (header.contains(";base64")) {
                         bytes = Base64.decode(content, Base64.DEFAULT);
                     } else {
@@ -541,7 +595,6 @@ public class MainActivity extends Activity {
                     bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
                 }
             } else if (dataUrlOrBase64.matches("[A-Za-z0-9+/=\\r\\n]{16,}")) {
-                // 只有「整串都是 base64 字元」才解碼
                 try {
                     bytes = Base64.decode(dataUrlOrBase64, Base64.DEFAULT);
                 } catch (Exception e) {
@@ -551,14 +604,12 @@ public class MainActivity extends Activity {
                 bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
             }
 
-            // 組出智慧檔名
             fileName = buildSaveFileName(fileName, bytes);
-            Log.d(TAG, "最終檔名: " + fileName);
+            Log.d(TAG, "最終檔名: " + fileName + "，大小: " + bytes.length);
 
             if (writeToDownloads(bytes, fileName, "application/json")) {
                 Toast.makeText(MainActivity.this, "✅ 已匯出：" + fileName, Toast.LENGTH_LONG).show();
             } else {
-                // MediaStore 失敗，改走 SAF
                 saveViaSAF(bytes, fileName);
             }
 
@@ -568,7 +619,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 把資料寫進「下載」資料夾，成功回傳 true */
     private boolean writeToDownloads(byte[] bytes, String fileName, String mimeType) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
@@ -599,7 +649,6 @@ public class MainActivity extends Activity {
             return false;
         }
 
-        // Android 9 以下直接寫
         try {
             File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
             if (!downloadsDir.exists()) downloadsDir.mkdirs();
@@ -627,7 +676,6 @@ public class MainActivity extends Activity {
         try {
             startActivityForResult(intent, CREATE_DOCUMENT_RESULT_CODE);
         } catch (Exception e) {
-            // 最後備援：分享
             shareSaveFile(bytes, fileName);
         }
     }
@@ -639,29 +687,24 @@ public class MainActivity extends Activity {
                 fos.write(data);
                 fos.flush();
             }
-
-            Uri contentUri = Uri.fromFile(cacheFile); // 簡易處理，正式建議用 FileProvider
+            Uri contentUri = Uri.fromFile(cacheFile);
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.setType("application/json");
             shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
             shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
             startActivity(Intent.createChooser(shareIntent, "儲存遊戲存檔: " + fileName));
         } catch (Exception e) {
             Toast.makeText(this, "❌ 分享失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
-    /* ==================== 智慧檔名處理 ==================== */
+    /* ==================== 智慧檔名 ==================== */
 
     private String buildSaveFileName(String rawName, byte[] bytes) {
         String base = rawName == null ? "" : rawName.trim();
-
-        // 去掉副檔名
         base = base.replaceAll("(?i)\\.(json|txt|sav|dat|bin)$", "").trim();
 
-        // 罐頭檔名視為沒給
-        if (base.matches("(?i)(idle[_-]?lineage[_-]?save|save|savefile|download|downloadfile|export|progress|存檔|下載|進度|未命名|fable5_save.*)?")) {
+        if (base.matches("(?i)(idle[_-]?lineage[_-]?save|save|savefile|download|downloadfile|export|progress|存檔|下載|進度|未命名|fable5_save.*|export_.*)?")) {
             base = "";
         }
         if (base.isEmpty()) {
@@ -679,18 +722,15 @@ public class MainActivity extends Activity {
     private String mapClass(String raw) {
         if (raw == null || raw.isEmpty()) return "";
         String v = raw.trim();
-
         if (v.matches(".*[\u4e00-\u9fff].*")) {
             return v.length() > 6 ? v.substring(0, 6) : v;
         }
-
         String[] order = {"王子", "騎士", "法師", "妖精", "黑暗妖精", "幻術士", "龍騎士", "戰士"};
         if (v.matches("\\d{1,2}")) {
             int i = Integer.parseInt(v);
             if (i == 0) return order[0];
             return (i <= order.length) ? order[i - 1] : "";
         }
-
         String k = v.toLowerCase().replaceAll("[\\s_\\-]", "");
         switch (k) {
             case "prince": case "royal": case "king": case "royalty": return "王子";
@@ -715,7 +755,6 @@ public class MainActivity extends Activity {
                 String body = text.substring(i + 5).trim();
                 int colon = body.indexOf(':');
                 if (colon >= 0) body = body.substring(colon + 1).trim();
-
                 if (body.startsWith("{") || body.startsWith("[")) {
                     probe = body;
                 } else {
@@ -723,12 +762,10 @@ public class MainActivity extends Activity {
                     try {
                         String decoded = new String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8);
                         if (decoded.contains("{")) probe = decoded;
-                    } catch (Exception ignored) {
-                    }
+                    } catch (Exception ignored) {}
                 }
             }
             if (probe.startsWith("LZ1:")) {
-                Log.d(TAG, "內容是 LZ1 壓縮格式，Java 端不解析");
                 return "";
             }
 
@@ -753,8 +790,6 @@ public class MainActivity extends Activity {
                 }
             }
 
-            Log.d(TAG, "Java 端解析 → 等級=" + level + " 職業原始值=" + rawClass + "→" + cls);
-
             String out = "";
             if (!level.isEmpty()) out += level + "等";
             if (!cls.isEmpty()) out += cls;
@@ -763,7 +798,6 @@ public class MainActivity extends Activity {
             return firstMatch(scope, new String[]{
                     "charName", "characterName", "playerName", "nickName", "nickname", "cname", "charname", "name"});
         } catch (Exception e) {
-            Log.w(TAG, "解析角色資訊失敗: " + e.getMessage());
             return "";
         }
     }
@@ -776,8 +810,7 @@ public class MainActivity extends Activity {
                     String v = m.group(1).trim();
                     if (!v.isEmpty()) return v;
                 }
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
         }
         return "";
     }
@@ -787,8 +820,7 @@ public class MainActivity extends Activity {
             try {
                 Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(\\d{1,3})").matcher(text);
                 if (m.find()) return m.group(1);
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
         }
         return "";
     }
@@ -812,9 +844,19 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void saveBase64File(String base64Data, String fileName) {
+            runOnUiThread(() -> processAndSaveFile(base64Data, "application/json", fileName));
+        }
+
+        @JavascriptInterface
+        public void triggerBlobFromJs(String blobUrl, String suggestedName) {
+            runOnUiThread(() -> triggerBlobDownload(blobUrl));
+        }
+
+        @JavascriptInterface
+        public void onExportError(String msg) {
             runOnUiThread(() -> {
-                // 統一走強化後的處理流程
-                processAndSaveFile(base64Data, "application/json", fileName);
+                Log.e(TAG, "Export Error: " + msg);
+                Toast.makeText(MainActivity.this, "❌ 匯出失敗：" + msg, Toast.LENGTH_LONG).show();
             });
         }
     }
