@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 監聽原生下載
+        // 監聽原生下載（專門處理外掛與遊戲本體的正常備份下載，不干涉結構）
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -135,16 +135,16 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 🔥 升級版：深度攔截人物選擇畫面 Blob 匯出、點擊事件與存檔格式相容校正
+                    // 2. 🔥 最終完善版：安全攔截人物選擇畫面 Blob 匯出（不傷外掛備份），並支援存檔自動相容校正
                     String fixSaveExportAndImportJs =
                         "(function(){" +
                         "if(window.__fix_save_active) return;" +
                         "window.__fix_save_active = true;" +
 
-                        // (A) 全域快取最近產生的 Blob 內容
                         "window.__last_blob_base64 = null;" +
+                        "window.__blob_map = {};" +
 
-                        // (B) 攔截 URL.createObjectURL，第一時間抓取產生的二進位資料
+                        // (A) 精準攔截 URL.createObjectURL，建立對應字典避免資料混淆
                         "var originalCreateObjectURL = URL.createObjectURL;" +
                         "URL.createObjectURL = function(blob){" +
                         "  var url = originalCreateObjectURL.apply(this, arguments);" +
@@ -152,7 +152,9 @@ public class MainActivity extends Activity {
                         "    var reader = new FileReader();" +
                         "    reader.onloadend = function(){" +
                         "      if(reader.result && reader.result.indexOf('data:') === 0){" +
-                        "        window.__last_blob_base64 = reader.result.split(',')[1];" +
+                        "        var b64 = reader.result.split(',')[1];" +
+                        "        window.__last_blob_base64 = b64;" +
+                        "        window.__blob_map[url] = b64;" +
                         "      }" +
                         "    };" +
                         "    reader.readAsDataURL(blob);" +
@@ -160,7 +162,7 @@ public class MainActivity extends Activity {
                         "  return url;" +
                         "};" +
 
-                        // (C) 主動監聽 DOM 點擊事件：完美攔截人物選擇畫面的匯出按鈕與 <a> 標籤
+                        // (B) 專門針對人物選擇畫面按鈕點擊進行安全導向，不干擾正規外掛備份
                         "document.addEventListener('click', function(e) {" +
                         "  var target = e.target;" +
                         "  while(target && target.tagName !== 'A') {" +
@@ -168,12 +170,13 @@ public class MainActivity extends Activity {
                         "  }" +
                         "  if(target && target.href) {" +
                         "    var href = target.href;" +
-                        "    if(href.indexOf('blob:') === 0 || target.hasAttribute('download')) {" +
+                        "    if(href.indexOf('blob:') === 0 && !target.hasAttribute('download')) {" +
                         "      e.preventDefault();" +
                         "      e.stopPropagation();" +
-                        "      var filename = target.getAttribute('download') || ('fable5_character_' + Date.now() + '.json');" +
-                        "      if(window.__last_blob_base64) {" +
-                        "        AndroidBridge.saveBase64File(window.__last_blob_base64, filename);" +
+                        "      var filename = 'fable5_character_' + Date.now() + '.json';" +
+                        "      var targetB64 = window.__blob_map[href] || window.__last_blob_base64;" +
+                        "      if(targetB64) {" +
+                        "        AndroidBridge.saveBase64File(targetB64, filename);" +
                         "      } else {" +
                         "        fetch(href)" +
                         "          .then(function(res){ return res.blob(); })" +
@@ -192,20 +195,7 @@ public class MainActivity extends Activity {
                         "  }" +
                         "}, true);" +
 
-                        // (D) 攔截原形鏈的 click 模擬點擊
-                        "var originalClick = HTMLAnchorElement.prototype.click;" +
-                        "HTMLAnchorElement.prototype.click = function() {" +
-                        "  if (this.href && (this.href.indexOf('blob:') === 0 || this.hasAttribute('download'))) {" +
-                        "    var filename = this.getAttribute('download') || ('fable5_character_' + Date.now() + '.json');" +
-                        "    if (window.__last_blob_base64) {" +
-                        "      AndroidBridge.saveBase64File(window.__last_blob_base64, filename);" +
-                        "      return;" +
-                        "    }" +
-                        "  }" +
-                        "  return originalClick.apply(this, arguments);" +
-                        "};" +
-
-                        // (E) 重寫 FileReader 讀取機制：自動校正與解開外掛封裝格式
+                        // (C) 重寫 FileReader 讀取機制：自動校正與解開外掛封裝格式
                         "var originalReadAsText = FileReader.prototype.readAsText;" +
                         "FileReader.prototype.readAsText = function(file, encoding){" +
                         "  var self = this;" +
@@ -268,8 +258,9 @@ public class MainActivity extends Activity {
 
     private void triggerBlobDownload(String blobUrl) {
         String js = "javascript:(function(){" +
-                "if(window.__last_blob_base64){" +
-                "  AndroidBridge.saveBase64File(window.__last_blob_base64, 'fable5_save_" + System.currentTimeMillis() + ".json');" +
+                "var targetB64 = (window.__blob_map && window.__blob_map['" + blobUrl + "']) || window.__last_blob_base64;" +
+                "if(targetB64){" +
+                "  AndroidBridge.saveBase64File(targetB64, 'fable5_save_" + System.currentTimeMillis() + ".json');" +
                 "} else {" +
                 "  var xhr=new XMLHttpRequest();" +
                 "  xhr.open('GET','" + blobUrl + "',true);" +
