@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 監聽原生下載（專門處理外掛與遊戲本體的正常備份下載，不干涉結構）
+        // 監聽原生下載（處理標準 Blob 與一般存檔下載）
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        // 接管檔案選擇器，修復匯入並加入格式自動校正處理
+        // 接管檔案選擇器，支援讀取本地存檔匯入
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
@@ -135,67 +135,12 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 🔥 最終完善版：安全攔截人物選擇畫面 Blob 匯出（不傷外掛備份），並支援存檔自動相容校正
-                    String fixSaveExportAndImportJs =
+                    // 2. 核心檔案讀取修復：確保匯入不同來源/外掛格式的存檔時能自動解析相容
+                    String fixImportJs =
                         "(function(){" +
-                        "if(window.__fix_save_active) return;" +
-                        "window.__fix_save_active = true;" +
+                        "if(window.__fix_import_active) return;" +
+                        "window.__fix_import_active = true;" +
 
-                        "window.__last_blob_base64 = null;" +
-                        "window.__blob_map = {};" +
-
-                        // (A) 精準攔截 URL.createObjectURL，建立對應字典避免資料混淆
-                        "var originalCreateObjectURL = URL.createObjectURL;" +
-                        "URL.createObjectURL = function(blob){" +
-                        "  var url = originalCreateObjectURL.apply(this, arguments);" +
-                        "  try {" +
-                        "    var reader = new FileReader();" +
-                        "    reader.onloadend = function(){" +
-                        "      if(reader.result && reader.result.indexOf('data:') === 0){" +
-                        "        var b64 = reader.result.split(',')[1];" +
-                        "        window.__last_blob_base64 = b64;" +
-                        "        window.__blob_map[url] = b64;" +
-                        "      }" +
-                        "    };" +
-                        "    reader.readAsDataURL(blob);" +
-                        "  } catch(err){}" +
-                        "  return url;" +
-                        "};" +
-
-                        // (B) 專門針對人物選擇畫面按鈕點擊進行安全導向，不干擾正規外掛備份
-                        "document.addEventListener('click', function(e) {" +
-                        "  var target = e.target;" +
-                        "  while(target && target.tagName !== 'A') {" +
-                        "    target = target.parentElement;" +
-                        "  }" +
-                        "  if(target && target.href) {" +
-                        "    var href = target.href;" +
-                        "    if(href.indexOf('blob:') === 0 && !target.hasAttribute('download')) {" +
-                        "      e.preventDefault();" +
-                        "      e.stopPropagation();" +
-                        "      var filename = 'fable5_character_' + Date.now() + '.json';" +
-                        "      var targetB64 = window.__blob_map[href] || window.__last_blob_base64;" +
-                        "      if(targetB64) {" +
-                        "        AndroidBridge.saveBase64File(targetB64, filename);" +
-                        "      } else {" +
-                        "        fetch(href)" +
-                        "          .then(function(res){ return res.blob(); })" +
-                        "          .then(function(blob){" +
-                        "            var r = new FileReader();" +
-                        "            r.onloadend = function(){" +
-                        "              if(r.result) {" +
-                        "                var b64 = r.result.split(',')[1];" +
-                        "                AndroidBridge.saveBase64File(b64, filename);" +
-                        "              }" +
-                        "            };" +
-                        "            r.readAsDataURL(blob);" +
-                        "          }).catch(function(err){});" +
-                        "      }" +
-                        "    }" +
-                        "  }" +
-                        "}, true);" +
-
-                        // (C) 重寫 FileReader 讀取機制：自動校正與解開外掛封裝格式
                         "var originalReadAsText = FileReader.prototype.readAsText;" +
                         "FileReader.prototype.readAsText = function(file, encoding){" +
                         "  var self = this;" +
@@ -214,7 +159,7 @@ public class MainActivity extends Activity {
                         "};" +
 
                         "})()";
-                    view.evaluateJavascript(fixSaveExportAndImportJs, null);
+                    view.evaluateJavascript(fixImportJs, null);
                 }
             }
         });
@@ -258,23 +203,18 @@ public class MainActivity extends Activity {
 
     private void triggerBlobDownload(String blobUrl) {
         String js = "javascript:(function(){" +
-                "var targetB64 = (window.__blob_map && window.__blob_map['" + blobUrl + "']) || window.__last_blob_base64;" +
-                "if(targetB64){" +
-                "  AndroidBridge.saveBase64File(targetB64, 'fable5_save_" + System.currentTimeMillis() + ".json');" +
-                "} else {" +
-                "  var xhr=new XMLHttpRequest();" +
-                "  xhr.open('GET','" + blobUrl + "',true);" +
-                "  xhr.responseType='blob';" +
-                "  xhr.onload=function(){" +
-                "    var reader=new FileReader();" +
-                "    reader.onloadend=function(){" +
-                "      var base64=reader.result.split(',')[1];" +
-                "      AndroidBridge.saveBase64File(base64,'fable5_save_" + System.currentTimeMillis() + ".json');" +
-                "    };" +
-                "    reader.readAsDataURL(xhr.response);" +
+                "var xhr=new XMLHttpRequest();" +
+                "xhr.open('GET','" + blobUrl + "',true);" +
+                "xhr.responseType='blob';" +
+                "xhr.onload=function(){" +
+                "  var reader=new FileReader();" +
+                "  reader.onloadend=function(){" +
+                "    var base64=reader.result.split(',')[1];" +
+                "    AndroidBridge.saveBase64File(base64,'fable5_save_" + System.currentTimeMillis() + ".json');" +
                 "  };" +
-                "  xhr.send();" +
-                "}" +
+                "  reader.readAsDataURL(xhr.response);" +
+                "};" +
+                "xhr.send();" +
                 "})()";
         webView.evaluateJavascript(js, null);
     }
