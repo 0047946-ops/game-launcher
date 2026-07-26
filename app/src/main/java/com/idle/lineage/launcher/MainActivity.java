@@ -3,11 +3,15 @@ package com.idle.lineage.launcher;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.CookieManager;
@@ -21,6 +25,7 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
 
 public class MainActivity extends Activity {
 
@@ -73,7 +78,6 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        // 保留：一般 http(s) 下載連結的備用處理（這個遊戲用不到，但留著無害）
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
@@ -139,8 +143,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 精準版：只攔截這款遊戲實際使用的 Blob + <a download> 匯出手法
-    // 涵蓋人物選擇畫面與遊戲內畫面，因為兩者呼叫同一個 exportSave() 邏輯
     private void injectExportHook(WebView view) {
         String js =
             "(function(){" +
@@ -199,17 +201,59 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 try {
                     byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
-                    File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                    if (!dir.exists()) dir.mkdirs();
-                    File outFile = new File(dir, fileName);
-                    FileOutputStream fos = new FileOutputStream(outFile);
-                    fos.write(bytes);
-                    fos.close();
-                    toast("✅ 匯出成功：" + outFile.getAbsolutePath());
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        saveViaMediaStore(bytes, fileName);
+                    } else {
+                        saveViaLegacyFile(bytes, fileName);
+                    }
                 } catch (Exception e) {
                     toast("❌ 寫檔失敗：" + e.getMessage());
                 }
             });
+        }
+
+        private void saveViaMediaStore(byte[] bytes, String fileName) {
+            try {
+                ContentResolver resolver = getContentResolver();
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+
+                Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                Uri itemUri = resolver.insert(collection, values);
+
+                if (itemUri == null) {
+                    toast("❌ 寫檔失敗：MediaStore 無法建立檔案項目");
+                    return;
+                }
+
+                OutputStream out = resolver.openOutputStream(itemUri);
+                if (out == null) {
+                    toast("❌ 寫檔失敗：openOutputStream 回傳 null");
+                    return;
+                }
+                out.write(bytes);
+                out.close();
+
+                toast("✅ 匯出成功：Download/" + fileName);
+            } catch (Exception e) {
+                toast("❌ MediaStore 寫檔失敗：" + e.getMessage());
+            }
+        }
+
+        private void saveViaLegacyFile(byte[] bytes, String fileName) {
+            try {
+                File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!dir.exists()) dir.mkdirs();
+                File outFile = new File(dir, fileName);
+                FileOutputStream fos = new FileOutputStream(outFile);
+                fos.write(bytes);
+                fos.close();
+                toast("✅ 匯出成功：" + outFile.getAbsolutePath());
+            } catch (Exception e) {
+                toast("❌ 舊版寫檔失敗：" + e.getMessage());
+            }
         }
     }
 
