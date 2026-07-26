@@ -5,6 +5,7 @@ import android.app.DownloadManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -127,6 +128,20 @@ public class MainActivity extends Activity {
         });
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                if (url != null && url.startsWith("http")) {
+                    // 關鍵修正：在遊戲程式碼開始執行「之前」就先拔掉 showSaveFilePicker，
+                    // 強制 exportSave() 一律走 downloadSaveFile()（Blob + <a download>），
+                    // 不然手機 WebView 版本較新時，可能會卡在 showSaveFilePicker 這個呼叫上完全沒反應。
+                    view.evaluateJavascript(
+                        "try{Object.defineProperty(window,'showSaveFilePicker',{value:undefined,configurable:false});}catch(e){}",
+                        null
+                    );
+                }
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
@@ -495,8 +510,6 @@ public class MainActivity extends Activity {
         return fileName;
     }
 
-    // ===== 匯出寫檔邏輯（採用 MediaStore 官方做法，不需要「管理所有檔案」權限） =====
-
     private void processAndSaveFile(String rawContent, String fileNameHint) {
         if (rawContent == null || rawContent.isEmpty()) return;
         try {
@@ -541,10 +554,10 @@ public class MainActivity extends Activity {
                 if (uri == null) return false;
 
                 boolean ok = false;
-                try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                    if (os != null) {
-                        os.write(bytes);
-                        os.flush();
+                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                    if (out != null) {
+                        out.write(bytes);
+                        out.flush();
                         ok = true;
                     }
                 }
