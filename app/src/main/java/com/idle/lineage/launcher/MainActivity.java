@@ -135,24 +135,45 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 🔥 核心：攔截所有動態下載 + 徹底解決外掛與遊戲存檔格式不相容問題
+                    // 2. 🔥 全面修復：動態錨點點擊攔截 + Blob捕捉 + 存檔格式自動相容校正
                     String fixSaveExportAndImportJs =
                         "(function(){" +
                         "if(window.__fix_save_active) return;" +
                         "window.__fix_save_active = true;" +
 
-                        // (A) 重寫 URL.createObjectURL，捕捉人物選擇頁面「匯出進度」生成的 Blob
+                        // (A) 攔截動態 <a> 標籤點擊（修復人物選擇畫面的「匯出進度」按鈕）
+                        "var originalClick = HTMLAnchorElement.prototype.click;" +
+                        "HTMLAnchorElement.prototype.click = function() {" +
+                        "  if (this.href && (this.href.indexOf('blob:') === 0 || this.hasAttribute('download'))) {" +
+                        "    var downloadName = this.getAttribute('download') || ('fable5_save_' + Date.now() + '.json');" +
+                        "    fetch(this.href)" +
+                        "      .then(function(res){ return res.blob(); })" +
+                        "      .then(function(blob){" +
+                        "        var reader = new FileReader();" +
+                        "        reader.onloadend = function(){" +
+                        "          if(reader.result && reader.result.indexOf('data:') === 0){" +
+                        "            var base64 = reader.result.split(',')[1];" +
+                        "            AndroidBridge.saveBase64File(base64, downloadName);" +
+                        "          }" +
+                        "        };" +
+                        "        reader.readAsDataURL(blob);" +
+                        "      }).catch(function(err){});" +
+                        "    return;" +
+                        "  }" +
+                        "  return originalClick.apply(this, arguments);" +
+                        "};" +
+
+                        // (B) 重寫 URL.createObjectURL，捕捉各種動態生成的 Blob 檔
                         "var originalCreateObjectURL = URL.createObjectURL;" +
                         "URL.createObjectURL = function(blob){" +
                         "  var url = originalCreateObjectURL.apply(this, arguments);" +
                         "  try {" +
                         "    var reader = new FileReader();" +
                         "    reader.onloadend = function(){" +
-                        "      if(reader.result){" +
-                        "        var parts = reader.result.split(',');" +
-                        "        if(parts.length > 1){" +
-                        "          AndroidBridge.saveBase64File(parts[1], 'fable5_save_' + Date.now() + '.json');" +
-                        "        }" +
+                        "      if(reader.result && reader.result.indexOf('data:') === 0){" +
+                        "        var base64 = reader.result.split(',')[1];" +
+                        "        window.__last_blob_base64 = base64;" +
+                        "        AndroidBridge.saveBase64File(base64, 'fable5_save_' + Date.now() + '.json');" +
                         "      }" +
                         "    };" +
                         "    reader.readAsDataURL(blob);" +
@@ -160,7 +181,7 @@ public class MainActivity extends Activity {
                         "  return url;" +
                         "};" +
 
-                        // (B) 重寫 FileReader 讀取機制：當遊戲或外掛讀取 .json 匯入檔時，自動修正 JSON 結構
+                        // (C) 重寫 FileReader 讀取機制：當遊戲或外掛讀取 .json 匯入檔時，自動校正與解開外掛封裝格式
                         "var originalReadAsText = FileReader.prototype.readAsText;" +
                         "FileReader.prototype.readAsText = function(file, encoding){" +
                         "  var self = this;" +
@@ -169,7 +190,6 @@ public class MainActivity extends Activity {
                         "    try {" +
                         "      var rawText = e.target.result;" +
                         "      var parsed = JSON.parse(rawText);" +
-                        "      // 如果包含外掛封裝格式，自動解開提取真正的角色 JSON" +
                         "      if(parsed && parsed.data) rawText = typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data);" +
                         "      if(parsed && parsed.save) rawText = typeof parsed.save === 'string' ? parsed.save : JSON.stringify(parsed.save);" +
                         "      Object.defineProperty(e.target, 'result', { value: rawText, writable: true });" +
