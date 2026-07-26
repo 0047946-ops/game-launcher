@@ -50,11 +50,11 @@ public class MainActivity extends Activity {
     private static final String PREFS_NAME = "GamePrefs";
     private static final String KEY_CURRENT_VERSION = "current_version";
 
-    // 🌐 雙網址伺服器
+    // 🌐 雙網址伺服器核心配置
     private static final String URL_ORIGINAL_GAME = "https://shines871.github.io/idle-lineage-class/";
     private static final String URL_MODDED_GAME = "https://pp771007.github.io/idle-lineage-class/";
 
-    // 🚀 三大 GitHub 雲端基地網址
+    // 🚀 三大 GitHub 雲端基地與熱更新指令集
     private static final String URL_RELEASE_JSON = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/release.json";
     private static final String URL_SAVE_HOOK = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/save_hook.js";
     private static final String URL_MASTER_ENGINE = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/scripts/main.user.js";
@@ -83,13 +83,12 @@ public class MainActivity extends Activity {
 
         checkAllFilesAccessPermission();
 
-        // 建立全螢幕畫面包含 UI 下載進度條與 WebView
+        // 建立全螢幕畫面包含 UI 進度條與高效 WebView
         RelativeLayout rootLayout = new RelativeLayout(this);
         webView = new WebView(this);
         rootLayout.addView(webView, new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
 
-        // 動態構建 Loading UI
         buildLoadingUI(rootLayout);
         setContentView(rootLayout);
 
@@ -98,7 +97,7 @@ public class MainActivity extends Activity {
 
         setupWebView();
 
-        // 開啟非同步線程處理熱更新與遊戲載入
+        // 非同步線程處理熱更新與遊戲載入序列
         executor.execute(() -> {
             loadGameInWebView();
             checkForUpdates();
@@ -211,35 +210,38 @@ public class MainActivity extends Activity {
                     super.onPageFinished(view, url);
                     
                     if (url != null && url.startsWith("http")) {
-                        // 🛠️ 1. 全域攔截所有 Blob 下載點擊事件，解決「匯出進度無反應」問題
+                        // 🛠️ 全域三重注入引擎：解決 Blob 存檔捕獲與人物畫面匯出
                         String downloadHookJs = "(function() {" +
                                 "if(window.__download_hooked) return;" +
                                 "window.__download_hooked = true;" +
+                                "const processBlob = function(blobUrl, fileName) {" +
+                                "   fetch(blobUrl).then(r => r.blob()).then(b => {" +
+                                "       const reader = new FileReader();" +
+                                "       reader.onloadend = function() {" +
+                                "           if(window.AndroidBridge) {" +
+                                "               window.AndroidBridge.saveBase64File(reader.result, 'application/json', fileName);" +
+                                "           }" +
+                                "       };" +
+                                "       reader.readAsDataURL(b);" +
+                                "   }).catch(err => console.error(err));" +
+                                "};" +
                                 "const originalClick = HTMLAnchorElement.prototype.click;" +
                                 "HTMLAnchorElement.prototype.click = function() {" +
                                 "   if (this.href && (this.href.startsWith('blob:') || this.href.startsWith('data:'))) {" +
                                 "       const fileName = this.download || ('fable5_save_' + Date.now() + '.json');" +
-                                "       if (window.AndroidBridge) {" +
-                                "           fetch(this.href).then(r => r.blob()).then(b => {" +
-                                "               const reader = new FileReader();" +
-                                "               reader.onloadend = function() {" +
-                                "                   window.AndroidBridge.saveBase64File(reader.result, 'application/json', fileName);" +
-                                "               };" +
-                                "               reader.readAsDataURL(b);" +
-                                "           });" +
-                                "           return;" +
-                                "       }" +
+                                "       processBlob(this.href, fileName);" +
+                                "       return;" +
                                 "   }" +
                                 "   return originalClick.apply(this, arguments);" +
                                 "};" +
                                 "})();";
                         view.evaluateJavascript(downloadHookJs, null);
 
-                        // 🚀 注入雲端基地 SaveHook 與 Master Engine 核心腳本
+                        // 🚀 雲端基地核心腳本掛載
                         injectRemoteScript(view, URL_SAVE_HOOK);
                         injectRemoteScript(view, URL_MASTER_ENGINE);
 
-                        // 2. 自動注入【10 大外掛模組】
+                        // 🎯 10 大模組與自動化增強注入邏輯
                         String totalPluginJs = "(function () {" +
                                 "'use strict';" +
                                 "if(window.__all_plugins_loaded) return;" +
@@ -279,7 +281,7 @@ public class MainActivity extends Activity {
                                 "})();";
                         view.evaluateJavascript(totalPluginJs, null);
 
-                        // 3. 自動注入【TMEngine v106.0 防斷線引擎】
+                        // 🛡️ TMEngine v106.0 防斷線優化引擎
                         String tmEngineJs = "(function() {" +
                                 "'use strict';" +
                                 "if(window.__tm_engine_loaded) return;" +
@@ -327,7 +329,7 @@ public class MainActivity extends Activity {
         mainHandler.post(() -> {
             File indexFile = new File(gameDir, "index.html");
             if (indexFile.exists()) {
-                Log.d(TAG, "優先載入本地熱更新解壓遊戲包");
+                Log.d(TAG, "優先掛載本地快取遊戲核心");
                 webView.loadUrl("file://" + indexFile.getAbsolutePath());
             } else {
                 loadNativeLauncherHtml();
@@ -335,10 +337,9 @@ public class MainActivity extends Activity {
         });
     }
 
-    // 🚀 熱更新機制：檢查 GitHub / 雲端基地 release.json 並下載解壓
     private void checkForUpdates() {
         try {
-            Log.d(TAG, "檢查 GitHub 最新熱更新版本...");
+            Log.d(TAG, "正在檢查遠端版本更新...");
             URL url = new URL(GITHUB_RELEASE_API);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
@@ -356,7 +357,7 @@ public class MainActivity extends Activity {
                 String currentVersion = prefs.getString(KEY_CURRENT_VERSION, "");
 
                 if (!latestVersion.isEmpty() && !latestVersion.equals(currentVersion)) {
-                    showLoadingUI("發現熱更新版本 (" + latestVersion + ")，準備下載...");
+                    showLoadingUI("發現熱更新版本 (" + latestVersion + ")，正在同步...");
 
                     String zipUrl = "";
                     if (json.has("assets") && json.getJSONArray("assets").length() > 0) {
@@ -370,14 +371,14 @@ public class MainActivity extends Activity {
                         File downloadedZip = new File(getCacheDir(), "update.zip");
 
                         if (downloadFileWithProgress(zipUrl, downloadedZip)) {
-                            updateProgressUI("正在解壓縮遊戲熱更新包...", -1);
+                            updateProgressUI("正在安全解壓熱更新封包...", -1);
                             deleteRecursive(gameDir);
                             gameDir.mkdirs();
                             unzip(downloadedZip, gameDir);
                             downloadedZip.delete();
 
                             prefs.edit().putString(KEY_CURRENT_VERSION, latestVersion).apply();
-                            showToast("🎉 熱更新完成！正在載入最新版遊戲...");
+                            showToast("🎉 系統熱更新同步完畢！");
                             loadGameInWebView();
                             hideLoadingUI();
                             return;
@@ -386,7 +387,7 @@ public class MainActivity extends Activity {
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "熱更新檢查失敗或逾時", e);
+            Log.e(TAG, "版本檢查流程發生異常", e);
         }
 
         hideLoadingUI();
@@ -556,17 +557,23 @@ public class MainActivity extends Activity {
         try {
             byte[] bytes;
             String rawString = dataUrlOrBase64;
-            
-            // 🛡️ 徹底防護 Base64 解析，防止存檔資料損毀變成非法檔案
+
             if (rawString.contains(",")) {
                 rawString = rawString.split(",")[1];
             }
-            rawString = rawString.replaceAll("\\s+", ""); // 清除空格與換行
+            rawString = rawString.replaceAll("\\s+", "");
 
             try {
-                bytes = Base64.decode(rawString, Base64.DEFAULT);
+                byte[] decodedBytes = Base64.decode(rawString, Base64.DEFAULT);
+                String jsonString = new String(decodedBytes, StandardCharsets.UTF_8);
+
+                if (jsonString.startsWith("\uFEFF")) {
+                    jsonString = jsonString.substring(1);
+                }
+                jsonString = jsonString.trim();
+
+                bytes = jsonString.getBytes(StandardCharsets.UTF_8);
             } catch (Exception e) {
-                // 若本身不是完整 Base64，嘗試直接轉換為 UTF-8 位元組
                 bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
             }
 
