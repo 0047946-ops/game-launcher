@@ -64,11 +64,11 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_CURRENT_VERSION = "current_version";
     private static final String GITHUB_RELEASE_API = "https://api.github.com/repos/pp771007/idle-lineage-class/releases/latest";
 
-    // 🌐 [我們研究成果植入] 雙網址支援（原作者正式版 / 加掛擴充版）
+    // 🌐 我們研究的雙網址架構（原作者正式版 / 加掛擴充版）
     private static final String URL_ORIGINAL_GAME = "https://shines871.github.io/idle-lineage-class/";
     private static final String URL_MODDED_GAME = "https://pp771007.github.io/idle-lineage-class/";
 
-    // 🚀 [我們研究成果植入] 三大 GitHub 雲端後勤基地網址
+    // 🚀 我們建置的三大 GitHub 雲端基地網址
     private static final String URL_RELEASE_JSON = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/release.json";
     private static final String URL_SAVE_HOOK = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/save_hook.js";
     private static final String URL_MASTER_ENGINE = "https://raw.githubusercontent.com/0047946-ops/game-launcher/main/scripts/main.user.js";
@@ -90,10 +90,8 @@ public class MainActivity extends AppCompatActivity {
     private byte[] pendingSaveBytes = null;
     private String pendingSaveFileName = null;
 
-    /** 匯出檔名前綴。留空 = 不加前綴（檔名最短）；想加就填，例如 "放置天堂" */
+    /** 匯出檔名前綴 */
     private static final String SAVE_NAME_PREFIX = "";
-    /** assets/save_hook.js 的內容快取 */
-    private String saveHookJs = null;
 
     @Keep
     public class WebAppInterface {
@@ -195,9 +193,9 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    Log.d(TAG, "頁面載入完成: " + url);
+                    Log.d(TAG, "頁面載入完成，注入雲端基地腳本: " + url);
                     
-                    // 🎯 [我們研究成果植入] 自動注入雲端 SaveHook 與 Master Engine 擴充引擎
+                    // 🎯 自動注入雲端 SaveHook 與 Master Engine 擴充引擎
                     injectRemoteScript(view, URL_SAVE_HOOK);
                     injectRemoteScript(view, URL_MASTER_ENGINE);
                 }
@@ -205,7 +203,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // 🎯 [我們研究成果植入] 動態腳本注入方法
     private void injectRemoteScript(WebView view, String scriptUrl) {
         String js = "javascript:(function(){" +
                 "var s=document.createElement('script');" +
@@ -244,7 +241,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initGameAssetsIfNeeded() {
-        // 預留資產初始化
+        // 資產初始化預留
     }
 
     private void loadGameInWebView() {
@@ -262,7 +259,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkForUpdates() {
         try {
-            // 🌐 [我們研究成果植入] 讀取雲端基地 release.json 配置
             Log.d(TAG, "檢查雲端基地 release.json 配置: " + URL_RELEASE_JSON);
             URL releaseUrl = new URL(URL_RELEASE_JSON);
             HttpURLConnection releaseConn = (HttpURLConnection) releaseUrl.openConnection();
@@ -371,6 +367,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // 🛠️ 完整補齊原本被截斷的 initFileChooserLauncher 語法
     private void initFileChooserLauncher() {
         fileChooserLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -389,6 +386,7 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    // 🛠️ 完整補齊 SAF 建立文件的 Launcher
     private void initCreateDocumentLauncher() {
         createDocumentLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
