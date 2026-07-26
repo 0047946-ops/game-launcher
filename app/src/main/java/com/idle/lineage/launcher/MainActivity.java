@@ -38,6 +38,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
@@ -152,8 +153,8 @@ public class MainActivity extends Activity {
 
             webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
                 try {
-                    if (url.startsWith("blob:")) {
-                        triggerBlobDownload(url);
+                    if (url.startsWith("blob:") || url.startsWith("data:")) {
+                        triggerBlobDownload(url, guessFileName(contentDisposition, url));
                     } else {
                         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
                         request.setMimeType(mimetype);
@@ -199,7 +200,7 @@ public class MainActivity extends Activity {
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     String url = request.getUrl().toString();
                     if (url.startsWith("blob:") || url.startsWith("data:")) {
-                        triggerBlobDownload(url);
+                        triggerBlobDownload(url, "fable5_save_" + System.currentTimeMillis() + ".json");
                         return true;
                     }
                     return false;
@@ -210,11 +211,35 @@ public class MainActivity extends Activity {
                     super.onPageFinished(view, url);
                     
                     if (url != null && url.startsWith("http")) {
+                        // 🛠️ 1. 全域攔截所有 Blob 下載點擊事件，解決「匯出進度無反應」問題
+                        String downloadHookJs = "(function() {" +
+                                "if(window.__download_hooked) return;" +
+                                "window.__download_hooked = true;" +
+                                "const originalClick = HTMLAnchorElement.prototype.click;" +
+                                "HTMLAnchorElement.prototype.click = function() {" +
+                                "   if (this.href && (this.href.startsWith('blob:') || this.href.startsWith('data:'))) {" +
+                                "       const fileName = this.download || ('fable5_save_' + Date.now() + '.json');" +
+                                "       if (window.AndroidBridge) {" +
+                                "           fetch(this.href).then(r => r.blob()).then(b => {" +
+                                "               const reader = new FileReader();" +
+                                "               reader.onloadend = function() {" +
+                                "                   window.AndroidBridge.saveBase64File(reader.result, 'application/json', fileName);" +
+                                "               };" +
+                                "               reader.readAsDataURL(b);" +
+                                "           });" +
+                                "           return;" +
+                                "       }" +
+                                "   }" +
+                                "   return originalClick.apply(this, arguments);" +
+                                "};" +
+                                "})();";
+                        view.evaluateJavascript(downloadHookJs, null);
+
                         // 🚀 注入雲端基地 SaveHook 與 Master Engine 核心腳本
                         injectRemoteScript(view, URL_SAVE_HOOK);
                         injectRemoteScript(view, URL_MASTER_ENGINE);
 
-                        // 1. 自動注入【10 大外掛模組】
+                        // 2. 自動注入【10 大外掛模組】
                         String totalPluginJs = "(function () {" +
                                 "'use strict';" +
                                 "if(window.__all_plugins_loaded) return;" +
@@ -254,7 +279,7 @@ public class MainActivity extends Activity {
                                 "})();";
                         view.evaluateJavascript(totalPluginJs, null);
 
-                        // 2. 自動注入【TMEngine v106.0 防斷線引擎】
+                        // 3. 自動注入【TMEngine v106.0 防斷線引擎】
                         String tmEngineJs = "(function() {" +
                                 "'use strict';" +
                                 "if(window.__tm_engine_loaded) return;" +
@@ -313,20 +338,13 @@ public class MainActivity extends Activity {
     // 🚀 熱更新機制：檢查 GitHub / 雲端基地 release.json 並下載解壓
     private void checkForUpdates() {
         try {
-            Log.d(TAG, "檢查雲端基地 release.json 配置: " + URL_RELEASE_JSON);
-            URL releaseUrl = new URL(URL_RELEASE_JSON);
-            HttpURLConnection releaseConn = (HttpURLConnection) releaseUrl.openConnection();
-            releaseConn.setConnectTimeout(3000);
-            if (releaseConn.getResponseCode() == 200) {
-                Log.d(TAG, "✅ 雲端基地連線正常");
-            }
-
             Log.d(TAG, "檢查 GitHub 最新熱更新版本...");
             URL url = new URL(GITHUB_RELEASE_API);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "IdleLineageAndroidApp");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
             conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
 
             if (conn.getResponseCode() == 200) {
                 InputStream is = conn.getInputStream();
@@ -334,53 +352,73 @@ public class MainActivity extends Activity {
                 String response = s.hasNext() ? s.next() : "";
                 JSONObject json = new JSONObject(response);
 
-                String latestVersion = json.getString("tag_name");
+                String latestVersion = json.optString("tag_name", "");
                 String currentVersion = prefs.getString(KEY_CURRENT_VERSION, "");
 
-                if (!latestVersion.equals(currentVersion)) {
+                if (!latestVersion.isEmpty() && !latestVersion.equals(currentVersion)) {
                     showLoadingUI("發現熱更新版本 (" + latestVersion + ")，準備下載...");
 
-                    String zipUrl = json.getString("zipball_url");
-                    File downloadedZip = new File(getCacheDir(), "update.zip");
+                    String zipUrl = "";
+                    if (json.has("assets") && json.getJSONArray("assets").length() > 0) {
+                        zipUrl = json.getJSONArray("assets").getJSONObject(0).optString("browser_download_url", "");
+                    }
+                    if (zipUrl.isEmpty()) {
+                        zipUrl = json.optString("zipball_url", "");
+                    }
 
-                    if (downloadFileWithProgress(zipUrl, downloadedZip)) {
-                        updateProgressUI("正在解壓縮遊戲熱更新包...", -1);
-                        deleteRecursive(gameDir);
-                        gameDir.mkdirs();
-                        unzip(downloadedZip, gameDir);
-                        downloadedZip.delete();
+                    if (!zipUrl.isEmpty()) {
+                        File downloadedZip = new File(getCacheDir(), "update.zip");
 
-                        prefs.edit().putString(KEY_CURRENT_VERSION, latestVersion).apply();
-                        showToast("🎉 熱更新完成！正在載入最新版遊戲...");
-                        loadGameInWebView();
-                    } else {
-                        hideLoadingUI();
+                        if (downloadFileWithProgress(zipUrl, downloadedZip)) {
+                            updateProgressUI("正在解壓縮遊戲熱更新包...", -1);
+                            deleteRecursive(gameDir);
+                            gameDir.mkdirs();
+                            unzip(downloadedZip, gameDir);
+                            downloadedZip.delete();
+
+                            prefs.edit().putString(KEY_CURRENT_VERSION, latestVersion).apply();
+                            showToast("🎉 熱更新完成！正在載入最新版遊戲...");
+                            loadGameInWebView();
+                            hideLoadingUI();
+                            return;
+                        }
                     }
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "熱更新檢查失敗", e);
-            hideLoadingUI();
+            Log.e(TAG, "熱更新檢查失敗或逾時", e);
         }
+
+        hideLoadingUI();
     }
 
     private boolean downloadFileWithProgress(String urlStr, File outputFile) {
+        HttpURLConnection conn = null;
         try {
             URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "IdleLineageAndroidApp");
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
             conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
 
-            int responseCode = conn.getResponseCode();
-            while (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
+            int status = conn.getResponseCode();
+            int redirectCount = 0;
+            while ((status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM 
+                    || status == HttpURLConnection.HTTP_SEE_OTHER || status == 307) && redirectCount < 5) {
                 String redirectUrl = conn.getHeaderField("Location");
+                if (redirectUrl == null) break;
+                conn.disconnect();
                 url = new URL(redirectUrl);
                 conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "IdleLineageAndroidApp");
-                responseCode = conn.getResponseCode();
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                status = conn.getResponseCode();
+                redirectCount++;
             }
 
-            if (responseCode != HttpURLConnection.HTTP_OK) return false;
+            if (status != HttpURLConnection.HTTP_OK) return false;
 
             int fileLength = conn.getContentLength();
             try (InputStream is = conn.getInputStream(); FileOutputStream fos = new FileOutputStream(outputFile)) {
@@ -405,6 +443,8 @@ public class MainActivity extends Activity {
             return true;
         } catch (Exception e) {
             return false;
+        } finally {
+            if (conn != null) conn.disconnect();
         }
     }
 
@@ -471,20 +511,15 @@ public class MainActivity extends Activity {
         webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
     }
 
-    private void triggerBlobDownload(String blobUrl) {
+    private void triggerBlobDownload(String blobUrl, String fileName) {
         String js = "javascript:(function(){" +
-                "var xhr=new XMLHttpRequest();" +
-                "xhr.open('GET','" + blobUrl + "',true);" +
-                "xhr.responseType='blob';" +
-                "xhr.onload=function(){" +
+                "fetch('" + blobUrl + "').then(r=>r.blob()).then(b=>{" +
                 "  var reader=new FileReader();" +
                 "  reader.onloadend=function(){" +
-                "    var base64=reader.result.split(',')[1];" +
-                "    AndroidBridge.saveBase64File(base64, 'application/json', 'fable5_save_" + System.currentTimeMillis() + ".json');" +
+                "    AndroidBridge.saveBase64File(reader.result, 'application/json', '" + fileName + "');" +
                 "  };" +
-                "  reader.readAsDataURL(xhr.response);" +
-                "};" +
-                "xhr.send();" +
+                "  reader.readAsDataURL(b);" +
+                "}).catch(e=>{});" +
                 "})()";
         webView.evaluateJavascript(js, null);
     }
@@ -520,24 +555,32 @@ public class MainActivity extends Activity {
     private void processAndSaveFile(String dataUrlOrBase64, String mimeType, String fileName) {
         try {
             byte[] bytes;
-            if (dataUrlOrBase64.contains(",")) {
-                String base64 = dataUrlOrBase64.split(",")[1];
-                bytes = Base64.decode(base64, Base64.DEFAULT);
-            } else {
-                bytes = Base64.decode(dataUrlOrBase64, Base64.DEFAULT);
+            String rawString = dataUrlOrBase64;
+            
+            // 🛡️ 徹底防護 Base64 解析，防止存檔資料損毀變成非法檔案
+            if (rawString.contains(",")) {
+                rawString = rawString.split(",")[1];
+            }
+            rawString = rawString.replaceAll("\\s+", ""); // 清除空格與換行
+
+            try {
+                bytes = Base64.decode(rawString, Base64.DEFAULT);
+            } catch (Exception e) {
+                // 若本身不是完整 Base64，嘗試直接轉換為 UTF-8 位元組
+                bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
             }
 
             pendingSaveBytes = bytes;
-            pendingSaveFileName = fileName != null ? fileName : "fable5_save_" + System.currentTimeMillis() + ".json";
+            pendingSaveFileName = (fileName != null && !fileName.isEmpty()) ? fileName : "fable5_save_" + System.currentTimeMillis() + ".json";
 
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType(mimeType != null ? mimeType : "application/json");
+            intent.setType("application/json");
             intent.putExtra(Intent.EXTRA_TITLE, pendingSaveFileName);
 
             startActivityForResult(intent, CREATE_DOCUMENT_RESULT_CODE);
         } catch (Exception e) {
-            Toast.makeText(this, "❌ 導出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "❌ 導出準備失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
