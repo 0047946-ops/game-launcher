@@ -1,28 +1,19 @@
-package com.example.idlelineageapp;
+package com.example.idlelineageapp; // ⚠️ 請確認與您專案的 AndroidManifest.xml 套件名稱一致
 
 import android.app.AlertDialog;
-import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
-import android.webkit.JsPromptResult;
-import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.URLUtil;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -40,7 +31,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -48,12 +38,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -90,7 +76,6 @@ public class MainActivity extends AppCompatActivity {
     private byte[] pendingSaveBytes = null;
     private String pendingSaveFileName = null;
 
-    /** 匯出檔名前綴。留空 = 不加前綴；想加就填，例如 "放置天堂_" */
     private static final String SAVE_NAME_PREFIX = "";
 
     @Keep
@@ -102,7 +87,6 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> processAndSaveFile(dataUrlOrBase64, mimeType, fileName));
         }
 
-        /** JS 端攔不到下載時，把 localStorage 裡找到的所有存檔丟回來讓玩家自己選 */
         @JavascriptInterface
         @Keep
         public void pickSaveSlot(String slotsJson) {
@@ -125,12 +109,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
-        webView = findViewById(R.id.webView);
-        layoutLoading = findViewById(R.id.layoutLoading);
-        progressBar = findViewById(R.id.progressBar);
-        tvLoadingStatus = findViewById(R.id.tvLoadingStatus);
+        // 🛡️ 使用安全尋找資源的方式，確保就算 XML 稍微有落差也不會編譯失敗
+        setContentView(getResId("layout", "activity_main"));
+
+        webView = findViewById(getResId("id", "webView"));
+        layoutLoading = findViewById(getResId("id", "layoutLoading"));
+        progressBar = findViewById(getResId("id", "progressBar"));
+        tvLoadingStatus = findViewById(getResId("id", "tvLoadingStatus"));
+
+        // 若 xml 裡沒有 layoutLoading，則容錯建立 fallback WebView
+        if (webView == null) {
+            webView = new WebView(this);
+            setContentView(webView);
+        }
 
         gameDir = new File(getFilesDir(), "game");
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
@@ -141,10 +133,17 @@ public class MainActivity extends AppCompatActivity {
         setupWebView();
 
         executor.execute(() -> {
-            initGameAssetsIfNeeded();
             loadGameInWebView();
             checkForUpdates();
         });
+    }
+
+    private int getResId(String resType, String resName) {
+        try {
+            return getResources().getIdentifier(resName, resType, getPackageName());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private void setupWebView() {
@@ -193,9 +192,9 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    Log.d(TAG, "頁面載入完成，開始雙向動態注入雲端外掛腳本: " + url);
+                    Log.d(TAG, "頁面載入完成，開始注入我們的三大雲端基地腳本: " + url);
                     
-                    // 🎯 自動注入我們三大 GitHub 雲端基地中的腳本
+                    // 🎯 自動雙向注入我們的靈魂腳本
                     injectRemoteScript(view, URL_SAVE_HOOK);
                     injectRemoteScript(view, URL_MASTER_ENGINE);
                 }
@@ -213,31 +212,31 @@ public class MainActivity extends AppCompatActivity {
 
     private void showLoadingUI(String statusText) {
         mainHandler.post(() -> {
-            layoutLoading.setVisibility(View.VISIBLE);
-            tvLoadingStatus.setText(statusText);
-            progressBar.setIndeterminate(true);
+            if (layoutLoading != null) layoutLoading.setVisibility(View.VISIBLE);
+            if (tvLoadingStatus != null) tvLoadingStatus.setText(statusText);
+            if (progressBar != null) progressBar.setIndeterminate(true);
         });
     }
 
     private void updateProgressUI(String statusText, int progress) {
         mainHandler.post(() -> {
-            layoutLoading.setVisibility(View.VISIBLE);
-            tvLoadingStatus.setText(statusText);
-            if (progress >= 0) {
-                progressBar.setIndeterminate(false);
-                progressBar.setProgress(progress);
-            } else {
-                progressBar.setIndeterminate(true);
+            if (layoutLoading != null) layoutLoading.setVisibility(View.VISIBLE);
+            if (tvLoadingStatus != null) tvLoadingStatus.setText(statusText);
+            if (progressBar != null) {
+                if (progress >= 0) {
+                    progressBar.setIndeterminate(false);
+                    progressBar.setProgress(progress);
+                } else {
+                    progressBar.setIndeterminate(true);
+                }
             }
         });
     }
 
     private void hideLoadingUI() {
-        mainHandler.post(() -> layoutLoading.setVisibility(View.GONE));
-    }
-
-    private void initGameAssetsIfNeeded() {
-        // 保留解壓或本地初始化預留空間
+        mainHandler.post(() -> {
+            if (layoutLoading != null) layoutLoading.setVisibility(View.GONE);
+        });
     }
 
     private void loadGameInWebView() {
@@ -255,7 +254,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkForUpdates() {
         try {
-            // 1. 讀取我們建置的 release.json 進行後勤動態比對
             Log.d(TAG, "讀取雲端基地 release.json 配置: " + URL_RELEASE_JSON);
             URL releaseUrl = new URL(URL_RELEASE_JSON);
             HttpURLConnection releaseConn = (HttpURLConnection) releaseUrl.openConnection();
@@ -264,7 +262,6 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "✅ 雲端基地連線正常，後勤腳本同步中");
             }
 
-            // 2. 檢查 GitHub Releases 進行 apk / zip 資源熱更新
             Log.d(TAG, "檢查 GitHub Release 最新版本...");
             URL url = new URL(GITHUB_RELEASE_API);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
