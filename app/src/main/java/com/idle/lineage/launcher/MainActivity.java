@@ -16,6 +16,8 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -36,7 +38,6 @@ public class MainActivity extends Activity {
     private static final String KEY_SAVE_JSON = "player_save_json";
     private static final String KEY_GAME_URL = "custom_game_url";
     
-    // 預設遊戲網址
     private static final String DEFAULT_GAME_URL = "https://pp771007.github.io/";
 
     @Override
@@ -64,7 +65,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 原生檔案下載攔截器
+        // 原生下載監聽器（處理一般非 Blob 連結）
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -119,7 +120,6 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 
-                // 當載入線上遊戲頁面時自動注入腳本與備份機制
                 if (url != null && url.startsWith("http")) {
                     SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
                     
@@ -137,7 +137,7 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 自動寫入最新存檔至 localStorage
+                    // 2. 自動灌入外部存檔到遊戲 localStorage
                     String localJson = sp.getString(KEY_SAVE_JSON, "");
                     if (!localJson.isEmpty()) {
                         String safeJson = localJson.replace("'", "\\'").replace("\n", "").replace("\r", "");
@@ -151,7 +151,7 @@ public class MainActivity extends Activity {
                         view.evaluateJavascript(syncJs, null);
                     }
 
-                    // 3. 背景自動同步備份機制
+                    // 3. 背景每 3 秒備份存檔
                     String autoSyncBackJs = "(function(){" +
                             "if(window.__sync_listener_active) return;" +
                             "window.__sync_listener_active = true;" +
@@ -166,37 +166,58 @@ public class MainActivity extends Activity {
                             "})()";
                     view.evaluateJavascript(autoSyncBackJs, null);
 
-                    // 4. 點擊匯出事件攔截器
-                    String hookDownload =
+                    // 4. 🔥 核心亮點：重寫網頁 Blob 下載與 URL.createObjectURL，專治人物選擇畫面的匯出！
+                    String overrideBlobDownloadJs =
                         "(function(){" +
-                        "if(window.__export_hook_active) return;" +
-                        "window.__export_hook_active = true;" +
+                        "if(window.__blob_override_active) return;" +
+                        "window.__blob_override_active = true;" +
+                        
+                        // 攔截 HTML5 點擊下載事件
                         "document.addEventListener('click', function(e){" +
-                        "  var a = e.target.closest && e.target.closest('a');" +
-                        "  if(a && a.href){" +
-                        "    if(a.href.indexOf('blob:') === 0 || a.hasAttribute('download')){" +
+                        "  var target = e.target.closest && e.target.closest('a');" +
+                        "  if(target && target.href){" +
+                        "    var href = target.href;" +
+                        "    if(href.indexOf('blob:') === 0 || target.hasAttribute('download')){" +
                         "      e.preventDefault();" +
-                        "      fetch(a.href).then(r=>r.blob()).then(function(blob){" +
+                        "      e.stopPropagation();" +
+                        "      fetch(href).then(function(res){ return res.blob(); }).then(function(blob){" +
                         "        var reader = new FileReader();" +
                         "        reader.onloadend = function(){" +
                         "          var base64 = reader.result.split(',')[1];" +
-                        "          var name = a.download || 'fable5_save.json';" +
-                        "          AndroidBridge.saveBase64File(base64, name);" +
+                        "          var fileName = target.download || ('fable5_save_' + Date.now() + '.json');" +
+                        "          AndroidBridge.saveBase64File(base64, fileName);" +
                         "        };" +
                         "        reader.readAsDataURL(blob);" +
+                        "      }).catch(function(err){" +
+                        "        AndroidBridge.exportNativeSave();" +
                         "      });" +
                         "    }" +
                         "  }" +
                         "}, true);" +
+
+                        // 重寫 URL.createObjectURL，捕捉動態生成的下載檔
+                        "var originalCreateObjectURL = URL.createObjectURL;" +
+                        "URL.createObjectURL = function(blob){" +
+                        "  var url = originalCreateObjectURL.apply(this, arguments);" +
+                        "  try {" +
+                        "    var reader = new FileReader();" +
+                        "    reader.onloadend = function(){" +
+                        "      if(reader.result && reader.result.indexOf('data:') === 0){" +
+                        "        window.__last_blob_base64 = reader.result.split(',')[1];" +
+                        "      }" +
+                        "    };" +
+                        "    reader.readAsDataURL(blob);" +
+                        "  } catch(err){}" +
+                        "  return url;" +
+                        "};" +
                         "})()";
-                    view.evaluateJavascript(hookDownload, null);
+                    view.evaluateJavascript(overrideBlobDownloadJs, null);
                 }
             }
         });
 
         handleExternalFileIntent(getIntent());
         
-        // 載入動態生成的原生選單畫面
         loadNativeLauncherHtml();
     }
 
@@ -214,7 +235,7 @@ public class MainActivity extends Activity {
                 ".btn-export{background:#43a047;}" +
                 "input[type='text']{width:90%;padding:10px;margin:10px 0;border-radius:5px;border:none;}" +
                 "</style></head><body>" +
-                "<h2>天堂放置版 啟動器</h2>" +
+                "<h2>天堂放置版 雙外掛啟動器</h2>" +
                 "<button class='btn' onclick='location.href=\"" + savedUrl + "\"'>🚀 開始遊戲</button>" +
                 "<button class='btn btn-export' onclick='AndroidBridge.exportNativeSave()'>💾 匯出最新存檔 (.json)</button>" +
                 "<br><hr style='border-color:#333;'><br>" +
@@ -234,18 +255,22 @@ public class MainActivity extends Activity {
 
     private void triggerBlobDownload(String blobUrl) {
         String js = "javascript:(function(){" +
-                "var xhr=new XMLHttpRequest();" +
-                "xhr.open('GET','" + blobUrl + "',true);" +
-                "xhr.responseType='blob';" +
-                "xhr.onload=function(){" +
-                "  var reader=new FileReader();" +
-                "  reader.onloadend=function(){" +
-                "    var base64=reader.result.split(',')[1];" +
-                "    AndroidBridge.saveBase64File(base64,'fable5_save.json');" +
+                "if(window.__last_blob_base64){" +
+                "  AndroidBridge.saveBase64File(window.__last_blob_base64, 'fable5_save_" + System.currentTimeMillis() + ".json');" +
+                "} else {" +
+                "  var xhr=new XMLHttpRequest();" +
+                "  xhr.open('GET','" + blobUrl + "',true);" +
+                "  xhr.responseType='blob';" +
+                "  xhr.onload=function(){" +
+                "    var reader=new FileReader();" +
+                "    reader.onloadend=function(){" +
+                "      var base64=reader.result.split(',')[1];" +
+                "      AndroidBridge.saveBase64File(base64,'fable5_save_" + System.currentTimeMillis() + ".json');" +
+                "    };" +
+                "    reader.readAsDataURL(xhr.response);" +
                 "  };" +
-                "  reader.readAsDataURL(xhr.response);" +
-                "};" +
-                "xhr.send();" +
+                "  xhr.send();" +
+                "}" +
                 "})()";
         webView.evaluateJavascript(js, null);
     }
@@ -318,7 +343,7 @@ public class MainActivity extends Activity {
                     fos.write(bytes);
                     fos.close();
                     Toast.makeText(MainActivity.this,
-                            "✅ 存檔已成功匯出至 Download 資料夾：\n" + fileName, Toast.LENGTH_LONG).show();
+                            "✅ 人物存檔已成功匯出至 Download 資料夾：\n" + fileName, Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this,
                             "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -331,7 +356,7 @@ public class MainActivity extends Activity {
             SharedPreferences sp = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             String jsonText = sp.getString(KEY_SAVE_JSON, "");
             if (jsonText.isEmpty()) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "⚠️ 目前無暫存角色資料，請先開啟遊戲備份！", Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "⚠️ 目前無暫存角色資料，請先開啟遊戲！", Toast.LENGTH_SHORT).show());
                 return;
             }
             try {
