@@ -135,35 +135,16 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 🔥 全面修復：動態錨點點擊攔截 + Blob捕捉 + 存檔格式自動相容校正
+                    // 2. 🔥 升級版：深度攔截人物選擇畫面 Blob 匯出、點擊事件與存檔格式相容校正
                     String fixSaveExportAndImportJs =
                         "(function(){" +
                         "if(window.__fix_save_active) return;" +
                         "window.__fix_save_active = true;" +
 
-                        // (A) 攔截動態 <a> 標籤點擊（修復人物選擇畫面的「匯出進度」按鈕）
-                        "var originalClick = HTMLAnchorElement.prototype.click;" +
-                        "HTMLAnchorElement.prototype.click = function() {" +
-                        "  if (this.href && (this.href.indexOf('blob:') === 0 || this.hasAttribute('download'))) {" +
-                        "    var downloadName = this.getAttribute('download') || ('fable5_save_' + Date.now() + '.json');" +
-                        "    fetch(this.href)" +
-                        "      .then(function(res){ return res.blob(); })" +
-                        "      .then(function(blob){" +
-                        "        var reader = new FileReader();" +
-                        "        reader.onloadend = function(){" +
-                        "          if(reader.result && reader.result.indexOf('data:') === 0){" +
-                        "            var base64 = reader.result.split(',')[1];" +
-                        "            AndroidBridge.saveBase64File(base64, downloadName);" +
-                        "          }" +
-                        "        };" +
-                        "        reader.readAsDataURL(blob);" +
-                        "      }).catch(function(err){});" +
-                        "    return;" +
-                        "  }" +
-                        "  return originalClick.apply(this, arguments);" +
-                        "};" +
+                        // (A) 全域快取最近產生的 Blob 內容
+                        "window.__last_blob_base64 = null;" +
 
-                        // (B) 重寫 URL.createObjectURL，捕捉各種動態生成的 Blob 檔
+                        // (B) 攔截 URL.createObjectURL，第一時間抓取產生的二進位資料
                         "var originalCreateObjectURL = URL.createObjectURL;" +
                         "URL.createObjectURL = function(blob){" +
                         "  var url = originalCreateObjectURL.apply(this, arguments);" +
@@ -171,9 +152,7 @@ public class MainActivity extends Activity {
                         "    var reader = new FileReader();" +
                         "    reader.onloadend = function(){" +
                         "      if(reader.result && reader.result.indexOf('data:') === 0){" +
-                        "        var base64 = reader.result.split(',')[1];" +
-                        "        window.__last_blob_base64 = base64;" +
-                        "        AndroidBridge.saveBase64File(base64, 'fable5_save_' + Date.now() + '.json');" +
+                        "        window.__last_blob_base64 = reader.result.split(',')[1];" +
                         "      }" +
                         "    };" +
                         "    reader.readAsDataURL(blob);" +
@@ -181,7 +160,52 @@ public class MainActivity extends Activity {
                         "  return url;" +
                         "};" +
 
-                        // (C) 重寫 FileReader 讀取機制：當遊戲或外掛讀取 .json 匯入檔時，自動校正與解開外掛封裝格式
+                        // (C) 主動監聽 DOM 點擊事件：完美攔截人物選擇畫面的匯出按鈕與 <a> 標籤
+                        "document.addEventListener('click', function(e) {" +
+                        "  var target = e.target;" +
+                        "  while(target && target.tagName !== 'A') {" +
+                        "    target = target.parentElement;" +
+                        "  }" +
+                        "  if(target && target.href) {" +
+                        "    var href = target.href;" +
+                        "    if(href.indexOf('blob:') === 0 || target.hasAttribute('download')) {" +
+                        "      e.preventDefault();" +
+                        "      e.stopPropagation();" +
+                        "      var filename = target.getAttribute('download') || ('fable5_character_' + Date.now() + '.json');" +
+                        "      if(window.__last_blob_base64) {" +
+                        "        AndroidBridge.saveBase64File(window.__last_blob_base64, filename);" +
+                        "      } else {" +
+                        "        fetch(href)" +
+                        "          .then(function(res){ return res.blob(); })" +
+                        "          .then(function(blob){" +
+                        "            var r = new FileReader();" +
+                        "            r.onloadend = function(){" +
+                        "              if(r.result) {" +
+                        "                var b64 = r.result.split(',')[1];" +
+                        "                AndroidBridge.saveBase64File(b64, filename);" +
+                        "              }" +
+                        "            };" +
+                        "            r.readAsDataURL(blob);" +
+                        "          }).catch(function(err){});" +
+                        "      }" +
+                        "    }" +
+                        "  }" +
+                        "}, true);" +
+
+                        // (D) 攔截原形鏈的 click 模擬點擊
+                        "var originalClick = HTMLAnchorElement.prototype.click;" +
+                        "HTMLAnchorElement.prototype.click = function() {" +
+                        "  if (this.href && (this.href.indexOf('blob:') === 0 || this.hasAttribute('download'))) {" +
+                        "    var filename = this.getAttribute('download') || ('fable5_character_' + Date.now() + '.json');" +
+                        "    if (window.__last_blob_base64) {" +
+                        "      AndroidBridge.saveBase64File(window.__last_blob_base64, filename);" +
+                        "      return;" +
+                        "    }" +
+                        "  }" +
+                        "  return originalClick.apply(this, arguments);" +
+                        "};" +
+
+                        // (E) 重寫 FileReader 讀取機制：自動校正與解開外掛封裝格式
                         "var originalReadAsText = FileReader.prototype.readAsText;" +
                         "FileReader.prototype.readAsText = function(file, encoding){" +
                         "  var self = this;" +
