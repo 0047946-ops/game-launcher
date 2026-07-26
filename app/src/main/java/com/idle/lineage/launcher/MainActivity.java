@@ -50,6 +50,9 @@ public class MainActivity extends Activity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
+        // 允許背景播放音訊（防止 Android WebView 自動凍結 AudioContext 離線背景流）
+        settings.setMediaPlaybackRequiresUserGesture(false);
+
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
@@ -121,21 +124,256 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 
                 if (url != null && url.startsWith("http")) {
-                    // 1. 自動注入雙外掛
-                    String js1 = "if(!window.__main_plugin_loaded){window.__main_plugin_loaded=true;" +
-                            "var s1=document.createElement('script');" +
-                            "s1.src='https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js';" +
-                            "document.head.appendChild(s1);}";
-                    
-                    String js2 = "if(!window.__gm_shop_loaded){window.__gm_shop_loaded=true;" +
-                            "var s2=document.createElement('script');" +
-                            "s2.src='https://kid0924.github.io/idle-lineage-class/klh_GMShop.js?t='+Date.now();" +
-                            "document.head.appendChild(s2);}";
-                    
-                    view.evaluateJavascript(js1, null);
-                    view.evaluateJavascript(js2, null);
+                    // 1. 自動注入【10 大外掛模組】(含主外掛 + 9個書籤模組)
+                    String totalPluginJs = "(function () {" +
+                            "'use strict';" +
+                            "if(window.__all_plugins_loaded) return;" +
+                            "window.__all_plugins_loaded = true;" +
+                            
+                            // 先載入原本的主外掛
+                            "var s0 = document.createElement('script');" +
+                            "s0.src = 'https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js?v=' + Date.now();" +
+                            "document.body.appendChild(s0);" +
 
-                    // 2. 核心檔案讀取修復：確保匯入不同來源/外掛格式的存檔時能自動解析相容
+                            // 接著依序載入 9 個書籤模組
+                            "const b = 'https://kid0924.github.io/idle-lineage-class/';" +
+                            "const t = window.location.hostname.includes('pp771007');" +
+                            "const c = ['klh_initial.js','klh_GMShop.js','klh_mobile-perf.js','klh_perf-monitor.js','klh_Backpack.js','klh_pk.js','klh_Pandora.js'].map(x => b + x);" +
+                            "const n = t ? [...[b+'klh_remove-banner.js'],...c] : [...['https://pp771007.github.io/idle-lineage-class/afk-lzcache.js', 'https://pp771007.github.io/idle-lineage-class/afk-offline.js'],...c];" +
+                            "function s(e, t) {" +
+                            "    const node = document.createElement('div');" +
+                            "    node.textContent = e;" +
+                            "    node.style.cssText = 'position:fixed;top:20px;right:20px;background:' + (t ? '#2ecc71' : '#e74c3c') + ';color:white;padding:12px 24px;border-radius:8px;z-index:99999;font-family:sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:opacity 0.5s';" +
+                            "    document.body.appendChild(node);" +
+                            "    setTimeout(() => {" +
+                            "        node.style.opacity = '0';" +
+                            "        setTimeout(() => node.remove(), 500);" +
+                            "    }, 2500);" +
+                            "}" +
+                            "function l(e) {" +
+                            "    return new Promise((resolve, reject) => {" +
+                            "        const o = document.createElement('script');" +
+                            "        o.src = e + '?v=' + Date.now();" +
+                            "        o.onload = (() => { resolve(); });" +
+                            "        o.onerror = (() => { reject(e); });" +
+                            "        document.body.appendChild(o);" +
+                            "    });" +
+                            "}" +
+                            "n.reduce((e, t) => e.then(() => l(t)), Promise.resolve())" +
+                            "    .then(() => { s('🎉 【10大外掛模組】全部注入成功！', !0); })" +
+                            "    .catch(r => {" +
+                            "        const f = (r && typeof r === 'string') ? r.split('/').pop().split('?')[0] : '';" +
+                            "        s('❌ 載入失敗' + (f ? '：' + f : '！'), !1);" +
+                            "    });" +
+                            "})();";
+                    view.evaluateJavascript(totalPluginJs, null);
+
+                    // 2. 自動注入【TMEngine v106.0 全域極致整合防斷線引擎】
+                    String tmEngineJs = "(function() {" +
+                            "'use strict';" +
+                            "if(window.__tm_engine_loaded) return;" +
+                            "window.__tm_engine_loaded = true;" +
+
+                            "const PerformanceCore = {" +
+                            "    initTuning: () => {" +
+                            "        if (typeof window.requestIdleCallback !== 'undefined') {" +
+                            "            window.requestIdleCallback(() => {" +
+                            "                if (window.gc) window.gc();" +
+                            "                console.log('【TMEngine】低功耗模式與記憶體最佳化執行完畢。');" +
+                            "            }, { timeout: 500 });" +
+                            "        }" +
+                            "    }," +
+                            "    getJitter: (base, variance) => base + Math.floor(Math.random() * variance)" +
+                            "};" +
+
+                            "PerformanceCore.initTuning();" +
+
+                            "const originalSetInterval = window.setInterval;" +
+                            "window.setInterval = function(callback, delay, ...args) {" +
+                            "    const optimizedDelay = delay < 150 ? 150 : delay;" +
+                            "    return originalSetInterval(callback, optimizedDelay, ...args);" +
+                            "};" +
+
+                            "const NetworkOptimizer = {" +
+                            "    _isMobile: false," +
+                            "    detectEnvironment: async () => {" +
+                            "        const conn = navigator.connection || {};" +
+                            "        NetworkOptimizer._isMobile = conn.type === 'cellular' || /Android|webOS|iPhone|iPad/i.test(navigator.userAgent);" +
+                            "        try {" +
+                            "            const start = Date.now();" +
+                            "            await fetch(window.location.href, { method: 'HEAD', cache: 'no-cache' });" +
+                            "            const rtt = Date.now() - start;" +
+                            "            if (rtt > 150) NetworkOptimizer._isMobile = true;" +
+                            "        } catch (e) {}" +
+                            "    }," +
+                            "    getJitterParams: () => {" +
+                            "        return NetworkOptimizer._isMobile ? { base: 500, variance: 700 } : { base: 120, variance: 250 };" +
+                            "    }" +
+                            "};" +
+
+                            "const DOMWatcher = {" +
+                            "    waitForEl: (selector, success) => {" +
+                            "        const el = document.querySelector(selector);" +
+                            "        if (el) { success(el); return; }" +
+                            "        const obs = new MutationObserver((mutations, obs) => {" +
+                            "            const target = document.querySelector(selector);" +
+                            "            if (target) { obs.disconnect(); success(target); }" +
+                            "        });" +
+                            "        if (document.body) {" +
+                            "            obs.observe(document.body, { childList: true, subtree: true });" +
+                            "        } else {" +
+                            "            document.addEventListener('DOMContentLoaded', () => {" +
+                            "                obs.observe(document.body, { childList: true, subtree: true });" +
+                            "            });" +
+                            "        }" +
+                            "    }" +
+                            "};" +
+
+                            "const GuildInterfaceOptimizer = {" +
+                            "    isGuildActive: () => {" +
+                            "        const guildPanel = document.querySelector('.guild-interface, .blood-pledge-panel, [data-view=\"guild\"]');" +
+                            "        return guildPanel !== null && guildPanel.offsetParent !== null;" +
+                            "    }," +
+                            "    executeGuildLogic: () => {" +
+                            "        if (!GuildInterfaceOptimizer.isGuildActive()) return;" +
+                            "        const checkInBtn = document.querySelector('.guild-checkin-btn:not(.completed)');" +
+                            "        if (checkInBtn) {" +
+                            "            setTimeout(() => checkInBtn.click(), PerformanceCore.getJitter(500, 1000));" +
+                            "        }" +
+                            "        const donateBtn = document.querySelector('.guild-donate-confirm');" +
+                            "        if (donateBtn && Math.random() > 0.95) {" +
+                            "            setTimeout(() => donateBtn.click(), PerformanceCore.getJitter(800, 1500));" +
+                            "        }" +
+                            "    }" +
+                            "};" +
+
+                            "window.executeLogic = function() {" +
+                            "    if (GuildInterfaceOptimizer.isGuildActive()) {" +
+                            "        GuildInterfaceOptimizer.executeGuildLogic();" +
+                            "        return;" +
+                            "    }" +
+                            "    const hpText = document.querySelector('.hp-text')?.innerText;" +
+                            "    if (hpText) {" +
+                            "        const [cur, max] = hpText.split('/').map(Number);" +
+                            "        if (cur / max < 0.75) {" +
+                            "            const potionBtn = document.querySelector('#btn-use-potion') || document.querySelector('.potion-btn');" +
+                            "            if (potionBtn) potionBtn.click();" +
+                            "        }" +
+                            "    }" +
+                            "    const attackBtn = document.querySelector('.attack-btn');" +
+                            "    if (attackBtn && !attackBtn.classList.contains('cooldown')) {" +
+                            "        const { base, variance } = NetworkOptimizer.getJitterParams();" +
+                            "        setTimeout(() => attackBtn.click(), PerformanceCore.getJitter(base, variance));" +
+                            "    }" +
+                            "    const buffs = [" +
+                            "        { selector: '.status-haste', btn: '#btn-use-haste-potion' }," +
+                            "        { selector: '.status-shield', btn: '#btn-use-shield' }," +
+                            "        { selector: '.status-holy-weapon', btn: '#btn-use-holy-weapon' }," +
+                            "        { selector: '.status-berserk', btn: '#btn-use-berserk' }" +
+                            "    ];" +
+                            "    buffs.forEach(buff => {" +
+                            "        if (document.querySelector(buff.selector) === null) {" +
+                            "            const targetBtn = document.querySelector(buff.btn);" +
+                            "            if (targetBtn && Math.random() > 0.8) {" +
+                            "                setTimeout(() => targetBtn.click(), PerformanceCore.getJitter(400, 800));" +
+                            "            }" +
+                            "        }" +
+                            "    });" +
+                            "    if (Math.random() > 0.995) {" +
+                            "        const sellBtn = document.querySelector('#btn-sell-all-waste');" +
+                            "        if (sellBtn && sellBtn.offsetParent !== null) sellBtn.click();" +
+                            "    }" +
+                            "};" +
+
+                            "const PageVisibilityModule = {" +
+                            "    init: () => {" +
+                            "        document.addEventListener('visibilitychange', () => {" +
+                            "            if (!document.hidden && typeof window.executeLogic === 'function') {" +
+                            "                window.executeLogic();" +
+                            "            }" +
+                            "        });" +
+                            "    }" +
+                            "};" +
+
+                            "const HeartbeatModule = {" +
+                            "    sendKeepAliveSignal: () => {" +
+                            "        if (window.socket && window.socket.readyState === WebSocket.OPEN) {" +
+                            "            window.socket.send(JSON.stringify({ type: 'heartbeat', timestamp: Date.now() }));" +
+                            "        } else {" +
+                            "            fetch(window.location.href, { method: 'HEAD', cache: 'no-cache', keepalive: true }).catch(() => {});" +
+                            "        }" +
+                            "    }" +
+                            "};" +
+
+                            "const WebWorkerModule = {" +
+                            "    init: () => {" +
+                            "        if (!window.Worker) return;" +
+                            "        const workerCode = `let intervalId = null;" +
+                            "        self.onmessage = function(e) {" +
+                            "            if (e.data === 'start') {" +
+                            "                if (intervalId) clearInterval(intervalId);" +
+                            "                intervalId = setInterval(() => { self.postMessage('ping'); }, 1000);" +
+                            "            } else if (e.data === 'stop') {" +
+                            "                if (intervalId) clearInterval(intervalId);" +
+                            "            }" +
+                            "        };`;" +
+                            "        const blob = new Blob([workerCode], { type: 'application/javascript' });" +
+                            "        const workerUrl = URL.createObjectURL(blob);" +
+                            "        const worker = new Worker(workerUrl);" +
+                            "        worker.postMessage('start');" +
+                            "        worker.onmessage = function(e) {" +
+                            "            if (e.data === 'ping') HeartbeatModule.sendKeepAliveSignal();" +
+                            "        };" +
+                            "    }" +
+                            "};" +
+
+                            "const AudioKeepAliveModule = {" +
+                            "    silentAudioCtx: null," +
+                            "    init: () => {" +
+                            "        try {" +
+                            "            const AudioContext = window.AudioContext || window.webkitAudioContext;" +
+                            "            if (!AudioContext) return;" +
+                            "            AudioKeepAliveModule.silentAudioCtx = new AudioContext();" +
+                            "            const oscillator = AudioKeepAliveModule.silentAudioCtx.createOscillator();" +
+                            "            const gainNode = AudioKeepAliveModule.silentAudioCtx.createGain();" +
+                            "            gainNode.gain.value = 0.0001;" +
+                            "            oscillator.connect(gainNode);" +
+                            "            gainNode.connect(AudioKeepAliveModule.silentAudioCtx.destination);" +
+                            "            oscillator.start();" +
+                            "            document.addEventListener('visibilitychange', () => {" +
+                            "                if (AudioKeepAliveModule.silentAudioCtx && AudioKeepAliveModule.silentAudioCtx.state === 'suspended') {" +
+                            "                    AudioKeepAliveModule.silentAudioCtx.resume();" +
+                            "                }" +
+                            "            });" +
+                            "        } catch (e) {}" +
+                            "    }" +
+                            "};" +
+
+                            "const initSystem = async () => {" +
+                            "    await NetworkOptimizer.detectEnvironment();" +
+                            "    PageVisibilityModule.init();" +
+                            "    WebWorkerModule.init();" +
+                            "    AudioKeepAliveModule.init();" +
+
+                            "    const div = document.createElement('div');" +
+                            "    div.style = 'position:fixed; top:10px; left:10px; background:rgba(0,0,0,0.85); color:#0f0; padding:10px; z-index:2147483647; border-radius:8px; font-size:11px; border:1px solid #0f0; pointer-events:none;';" +
+                            "    div.innerHTML = `<div style=\"font-weight:bold;\">【TMEngine v106.0】全域極致整合防斷線版</div><div>● 背景抗凍結：四大模組運行中</div><div>● 模式：${NetworkOptimizer._isMobile ? '手機動態適配' : 'WIFI高速運行'}</div>`;" +
+
+                            "    const attachUI = () => {" +
+                            "        if (document.body) document.body.appendChild(div);" +
+                            "        else setTimeout(attachUI, 100);" +
+                            "    };" +
+                            "    attachUI();" +
+
+                            "    DOMWatcher.waitForEl('.attack-btn', () => {" +
+                            "        setInterval(window.executeLogic, 250);" +
+                            "    });" +
+                            "};" +
+                            "initSystem();" +
+                            "})();";
+                    view.evaluateJavascript(tmEngineJs, null);
+
+                    // 3. 核心檔案讀取修復：確保匯入不同來源/外掛格式的存檔時能自動解析相容
                     String fixImportJs =
                         "(function(){" +
                         "if(window.__fix_import_active) return;" +
@@ -181,14 +419,14 @@ public class MainActivity extends Activity {
                 ".btn-start:active{background:#218838;}" +
                 "</style></head><body>" +
                 "<div class='card'>" +
-                "  <h2>🎮 放置天堂雙外掛啟動器</h2>" +
-                "  <div class='subtitle'>Android 原生 WebView 注入版</div>" +
+                "  <h2>🎮 放置天堂 旗艦版啟動器</h2>" +
+                "  <div class='subtitle'>10大外掛模組 + TMEngine 防斷線引擎</div>" +
                 "  <div class='label'>選擇遊戲伺服器：</div>" +
                 "  <select id='serverSelect'>" +
                 "    <option value='https://pp771007.github.io/idle-lineage-class/'>伺服器一 (pp771007)</option>" +
                 "    <option value='https://shines871.github.io/idle-lineage-class/'>伺服器二 (shines871)</option>" +
                 "  </select>" +
-                "  <button class='btn-start' onclick='launchGame()'>🚀 啟動遊戲並載入雙外掛</button>" +
+                "  <button class='btn-start' onclick='launchGame()'>🚀 啟動遊戲與防斷線外掛</button>" +
                 "</div>" +
                 "<script>" +
                 "function launchGame(){" +
