@@ -143,11 +143,27 @@ public class MainActivity extends Activity {
         }
     }
 
+    // 強化診斷版：記錄「每一次點擊」的元素資訊，並攔截全域 JS 錯誤
     private void injectExportHook(WebView view) {
         String js =
             "(function(){" +
             "if (window.__export_hook_installed) return;" +
             "window.__export_hook_installed = true;" +
+
+            "document.addEventListener('click', function(e){" +
+            "  try {" +
+            "    var t = e.target;" +
+            "    var info = (t.tagName || '?')" +
+            "      + (t.id ? ('#' + t.id) : '')" +
+            "      + (t.className && typeof t.className === 'string' ? ('.' + t.className.split(' ').join('.')) : '')" +
+            "      + ' text=' + (t.textContent ? t.textContent.trim().substring(0,15) : '');" +
+            "    AndroidBridge.logDebug('點擊元素：' + info);" +
+            "  } catch(err) { AndroidBridge.logDebug('點擊記錄錯誤：' + err.message); }" +
+            "}, true);" +
+
+            "window.addEventListener('error', function(e){" +
+            "  AndroidBridge.logDebug('⚠️ JS錯誤：' + e.message);" +
+            "});" +
 
             "document.addEventListener('click', function(e){" +
             "  var a = e.target.closest && e.target.closest('a[download]');" +
