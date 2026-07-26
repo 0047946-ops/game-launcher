@@ -14,16 +14,14 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 
 public class MainActivity extends Activity {
 
@@ -104,8 +102,18 @@ public class MainActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.startsWith("blob:") || url.startsWith("data:")) {
+                    triggerBlobDownload(url);
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                Toast.makeText(MainActivity.this, "⚠️ 網頁載入失敗，請確認網路連線", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "⚠️ 網址連線失敗 (404)，請確認網路或伺服器狀態", Toast.LENGTH_LONG).show();
             }
 
             @Override
@@ -127,7 +135,7 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 重寫 Blob 與 下載攔截，確保人物選擇畫面的「匯出進度」運作
+                    // 2. 重寫 Blob 與 下載攔截，讓人物選擇畫面的「匯出進度」可以直接下載存檔
                     String overrideBlobDownloadJs =
                         "(function(){" +
                         "if(window.__blob_override_active) return;" +
@@ -176,7 +184,7 @@ public class MainActivity extends Activity {
         loadNativeLauncherHtml();
     }
 
-    // 載入伺服器選擇選單 UI
+    // 載入伺服器選擇選單 UI（正確網址已修正）
     private void loadNativeLauncherHtml() {
         String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
                 "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
@@ -195,8 +203,8 @@ public class MainActivity extends Activity {
                 "  <div class='subtitle'>Android 原生 WebView 注入版</div>" +
                 "  <div class='label'>選擇遊戲伺服器：</div>" +
                 "  <select id='serverSelect'>" +
-                "    <option value='https://pp771007.github.io/'>伺服器一 (pp771007)</option>" +
-                "    <option value='https://shines871.github.io/'>伺服器二 (shines871)</option>" +
+                "    <option value='https://pp771007.github.io/idle-lineage-class/'>伺服器一 (pp771007)</option>" +
+                "    <option value='https://shines871.github.io/idle-lineage-class/'>伺服器二 (shines871)</option>" +
                 "  </select>" +
                 "  <button class='btn-start' onclick='launchGame()'>🚀 啟動遊戲並載入雙外掛</button>" +
                 "</div>" +
