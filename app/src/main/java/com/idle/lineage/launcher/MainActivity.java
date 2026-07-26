@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 處理一般下載觸發
+        // 監聽原生下載
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             try {
                 if (url.startsWith("blob:")) {
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        // 讓遊戲點擊「匯入進度」時能正確開啟手機系統檔案選擇器
+        // 接管檔案選擇器，修復匯入並加入格式自動校正處理
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
@@ -113,7 +113,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                Toast.makeText(MainActivity.this, "⚠️ 網址連線失敗 (404)，請確認網路或伺服器狀態", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "⚠️ 網址連線失敗 (404)，請確認網路狀態", Toast.LENGTH_LONG).show();
             }
 
             @Override
@@ -135,48 +135,52 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(js1, null);
                     view.evaluateJavascript(js2, null);
 
-                    // 2. 重寫 Blob 與 下載攔截，讓人物選擇畫面的「匯出進度」可以直接下載存檔
-                    String overrideBlobDownloadJs =
+                    // 2. 🔥 核心：攔截所有動態下載 + 徹底解決外掛與遊戲存檔格式不相容問題
+                    String fixSaveExportAndImportJs =
                         "(function(){" +
-                        "if(window.__blob_override_active) return;" +
-                        "window.__blob_override_active = true;" +
-                        
-                        "document.addEventListener('click', function(e){" +
-                        "  var target = e.target.closest && e.target.closest('a');" +
-                        "  if(target && target.href){" +
-                        "    var href = target.href;" +
-                        "    if(href.indexOf('blob:') === 0 || target.hasAttribute('download')){" +
-                        "      e.preventDefault();" +
-                        "      e.stopPropagation();" +
-                        "      fetch(href).then(function(res){ return res.blob(); }).then(function(blob){" +
-                        "        var reader = new FileReader();" +
-                        "        reader.onloadend = function(){" +
-                        "          var base64 = reader.result.split(',')[1];" +
-                        "          var fileName = target.download || ('fable5_save_' + Date.now() + '.json');" +
-                        "          AndroidBridge.saveBase64File(base64, fileName);" +
-                        "        };" +
-                        "        reader.readAsDataURL(blob);" +
-                        "      }).catch(function(err){});" +
-                        "    }" +
-                        "  }" +
-                        "}, true);" +
+                        "if(window.__fix_save_active) return;" +
+                        "window.__fix_save_active = true;" +
 
+                        // (A) 重寫 URL.createObjectURL，捕捉人物選擇頁面「匯出進度」生成的 Blob
                         "var originalCreateObjectURL = URL.createObjectURL;" +
                         "URL.createObjectURL = function(blob){" +
                         "  var url = originalCreateObjectURL.apply(this, arguments);" +
                         "  try {" +
                         "    var reader = new FileReader();" +
                         "    reader.onloadend = function(){" +
-                        "      if(reader.result && reader.result.indexOf('data:') === 0){" +
-                        "        window.__last_blob_base64 = reader.result.split(',')[1];" +
+                        "      if(reader.result){" +
+                        "        var parts = reader.result.split(',');" +
+                        "        if(parts.length > 1){" +
+                        "          AndroidBridge.saveBase64File(parts[1], 'fable5_save_' + Date.now() + '.json');" +
+                        "        }" +
                         "      }" +
                         "    };" +
                         "    reader.readAsDataURL(blob);" +
                         "  } catch(err){}" +
                         "  return url;" +
                         "};" +
+
+                        // (B) 重寫 FileReader 讀取機制：當遊戲或外掛讀取 .json 匯入檔時，自動修正 JSON 結構
+                        "var originalReadAsText = FileReader.prototype.readAsText;" +
+                        "FileReader.prototype.readAsText = function(file, encoding){" +
+                        "  var self = this;" +
+                        "  var originalOnload = self.onload;" +
+                        "  self.onload = function(e){" +
+                        "    try {" +
+                        "      var rawText = e.target.result;" +
+                        "      var parsed = JSON.parse(rawText);" +
+                        "      // 如果包含外掛封裝格式，自動解開提取真正的角色 JSON" +
+                        "      if(parsed && parsed.data) rawText = typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data);" +
+                        "      if(parsed && parsed.save) rawText = typeof parsed.save === 'string' ? parsed.save : JSON.stringify(parsed.save);" +
+                        "      Object.defineProperty(e.target, 'result', { value: rawText, writable: true });" +
+                        "    } catch(err){}" +
+                        "    if(originalOnload) originalOnload.call(self, e);" +
+                        "  };" +
+                        "  return originalReadAsText.apply(this, arguments);" +
+                        "};" +
+
                         "})()";
-                    view.evaluateJavascript(overrideBlobDownloadJs, null);
+                    view.evaluateJavascript(fixSaveExportAndImportJs, null);
                 }
             }
         });
@@ -184,7 +188,6 @@ public class MainActivity extends Activity {
         loadNativeLauncherHtml();
     }
 
-    // 載入伺服器選擇選單 UI（正確網址已修正）
     private void loadNativeLauncherHtml() {
         String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
                 "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
