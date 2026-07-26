@@ -8,8 +8,7 @@
 * **雲端自動打包**：透過 GitHub Actions 自動編譯成 Android APK。
 # 🎮 放置天堂雙外掛啟動器
 
-跨平台雙外掛載入方案，支援 Android 原生 APK 與 iOS / PC 網頁 PWA 模式。
-
+跨平台雙外掛載入方案，支援 Android 原生 APK 
 
 
 ---
@@ -27,11 +26,6 @@
 * 🤖 **Android 玩家（推薦下載 APK）**：
   [👉 點此下載最新版 Android APK](https://github.com/0047946-ops/game-launcher/releases/latest)
   *(下載安裝後直接開啟，底層自動強制注入雙外掛，免設定)*
-
-* 🍎 **iOS (iPhone/iPad) & 電腦玩家（網頁入口）**：
-  [👉 點此開啟線上啟動器網址](https://0047946-ops.github.io/game-launcher/)
-  *(配合 Safari 瀏覽器 Userscripts 擴充套件使用，支援「新增至主畫面」全螢幕執行)*
-
 ---
 
 ### 📱 iOS 玩家設定快速指引
