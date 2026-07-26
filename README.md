@@ -41,7 +41,6 @@ iOS Safari 擴充功能模式（最推薦！100% 自動載入）
 ​步驟 3：點擊 Safari 網址列左側按鈕開啟 Userscripts，新增以下兩條外掛網址：
 ​主外掛網址：[https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js](https://cdn.jsdelivr.net/gh/qcc781192000/idle-lineage-plugin@main/main.user.js)
 ​GM 商店網址：[https://kid0924.github.io/idle-lineage-class/klh_GMShop.js](https://kid0924.github.io/idle-lineage-class/klh_GMShop.js)
-​步驟 4：使用 Safari 開啟我的網址 [https://0047946-ops.github.io/game-launcher/](https://0047946-ops.github.io/game-launcher/) 並點擊啟動，外掛即會在背景自動注入並順利執行。
 
 // ==UserScript==
 // @name         放置天堂-GM免費商店
