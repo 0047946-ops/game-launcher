@@ -1,20 +1,5 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-    dependencies {
-        // 請確保這裡有指定 Android Gradle Plugin 的版本號（通常為 8.1.0 或 8.2.0 左右）
-        classpath 'com.android.tools.build:gradle:8.1.4'
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
+plugins {
+    id 'com.android.application' version '8.2.0' apply false
 }
 
 task clean(type: Delete) {
