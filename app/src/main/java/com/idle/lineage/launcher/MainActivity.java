@@ -34,10 +34,6 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.Keep;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -53,8 +49,6 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MainActivity extends Activity {
 
@@ -66,45 +60,33 @@ public class MainActivity extends Activity {
     private ProgressBar progressBar;
     private TextView tvLoadingStatus;
 
-    private File gameDir;
     private SharedPreferences prefs;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private ValueCallback<Uri[]> filePathCallback;
-    private ActivityResultLauncher<Intent> fileChooserLauncher;
-    private ActivityResultLauncher<Intent> createDocumentLauncher;
-
     private byte[] pendingSaveBytes = null;
     private String pendingSaveFileName = null;
-
-    private static final String SAVE_NAME_PREFIX = "";
     private String saveHookJs = null;
     private final static int FILE_CHOOSER_RESULT_CODE = 10001;
 
-    @Keep
     public class WebAppInterface {
         @JavascriptInterface
-        @Keep
         public void saveBase64File(String dataUrlOrBase64, String mimeType, String fileName) {
             Log.d(TAG, "🎯 [JS 觸發導出] 檔名: " + fileName);
             runOnUiThread(() -> processAndSaveFile(dataUrlOrBase64, mimeType, fileName));
         }
 
         @JavascriptInterface
-        @Keep
         public void pickSaveSlot(String slotsJson) {
             runOnUiThread(() -> showSlotChooser(slotsJson));
         }
 
         @JavascriptInterface
-        @Keep
         public void log(String message) {
             Log.d(TAG, "🌐 [SaveHook] " + message);
         }
 
         @JavascriptInterface
-        @Keep
         public void toast(String message) {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
         }
@@ -115,21 +97,30 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         
         checkAllFilesAccessPermission();
-        setContentView(R.layout.activity_main);
+        
+        // 若找不到 layout 資源時使用動態建立介面保護，避免當機
+        try {
+            setContentView(R.layout.activity_main);
+            webView = findViewById(R.id.webView);
+            layoutLoading = findViewById(R.id.layoutLoading);
+            progressBar = findViewById(R.id.progressBar);
+            tvLoadingStatus = findViewById(R.id.tvLoadingStatus);
+        } catch (Exception e) {
+            setupFallbackLayout();
+        }
 
-        webView = findViewById(R.id.webView);
-        layoutLoading = findViewById(R.id.layoutLoading);
-        progressBar = findViewById(R.id.progressBar);
-        tvLoadingStatus = findViewById(R.id.tvLoadingStatus);
-
-        gameDir = new File(getFilesDir(), "game");
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-
-        initFileChooserLauncher();
-        initCreateDocumentLauncher();
         setupWebView();
-
         loadNativeLauncherHtml();
+    }
+
+    private void setupFallbackLayout() {
+        RelativeLayout root = new RelativeLayout(this);
+        webView = new WebView(this);
+        root.addView(webView, new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.MATCH_PARENT, 
+                RelativeLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
     }
 
     private void hideLoadingUI() {
@@ -138,58 +129,6 @@ public class MainActivity extends Activity {
                 layoutLoading.setVisibility(View.GONE);
             }
         });
-    }
-
-    private void initFileChooserLauncher() {
-        fileChooserLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (filePathCallback == null) return;
-                    Uri[] results = null;
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        Intent dataIntent = result.getData();
-                        if (dataIntent.getData() != null) {
-                            results = new Uri[]{dataIntent.getData()};
-                        } else if (dataIntent.getClipData() != null) {
-                            int count = dataIntent.getClipData().getItemCount();
-                            results = new Uri[count];
-                            for (int i = 0; i < count; i++) {
-                                results[i] = dataIntent.getClipData().getItemAt(i).getUri();
-                            }
-                        }
-                    }
-                    filePathCallback.onReceiveValue(results);
-                    filePathCallback = null;
-                }
-        );
-    }
-
-    private void initCreateDocumentLauncher() {
-        createDocumentLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null && result.getData().getData() != null) {
-                        Uri uri = result.getData().getData();
-                        if (pendingSaveBytes != null) {
-                            try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                                if (os != null) {
-                                    os.write(pendingSaveBytes);
-                                    os.flush();
-                                    Toast.makeText(MainActivity.this, "✅ 檔案已成功儲存！", Toast.LENGTH_SHORT).show();
-                                }
-                            } catch (Exception e) {
-                                showDebugDialog("❌ SAF 寫入失敗", e.getMessage());
-                            } finally {
-                                pendingSaveBytes = null;
-                                pendingSaveFileName = null;
-                            }
-                        }
-                    } else {
-                        pendingSaveBytes = null;
-                        pendingSaveFileName = null;
-                    }
-                }
-        );
     }
 
     private void setupWebView() {
@@ -232,7 +171,7 @@ public class MainActivity extends Activity {
 
                 Intent intent = fileChooserParams.createIntent();
                 try {
-                    fileChooserLauncher.launch(intent);
+                    startActivityForResult(intent, FILE_CHOOSER_RESULT_CODE);
                 } catch (Exception e) {
                     MainActivity.this.filePathCallback = null;
                     Toast.makeText(getApplicationContext(), "無法開啟檔案選擇器", Toast.LENGTH_SHORT).show();
@@ -368,7 +307,7 @@ public class MainActivity extends Activity {
                 Toast.makeText(MainActivity.this, "✅ 已匯出：" + fileName, Toast.LENGTH_LONG).show();
                 notifyJsExported();
             } else {
-                saveViaSAF(bytes, fileName);
+                shareSaveFile(bytes, fileName);
             }
         } catch (Exception e) {
             showDebugDialog("❌ 資料解析異常", e.toString());
@@ -436,22 +375,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void saveViaSAF(byte[] bytes, String fileName) {
-        this.pendingSaveBytes = bytes;
-        this.pendingSaveFileName = fileName;
-
-        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/json");
-        intent.putExtra(Intent.EXTRA_TITLE, fileName);
-
-        try {
-            createDocumentLauncher.launch(intent);
-        } catch (Exception e) {
-            shareSaveFile(bytes, fileName);
-        }
-    }
-
     private void shareSaveFile(byte[] data, String fileName) {
         try {
             File cacheFile = new File(getCacheDir(), fileName);
@@ -460,12 +383,9 @@ public class MainActivity extends Activity {
                 fos.flush();
             }
 
-            Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
-                    this, getPackageName() + ".fileprovider", cacheFile);
-
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.setType("application/json");
-            shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+            shareIntent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(cacheFile));
             shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
             startActivity(Intent.createChooser(shareIntent, "儲存遊戲存檔: " + fileName));
