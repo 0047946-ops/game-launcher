@@ -1,10 +1,13 @@
 package com.idle.lineage.launcher;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,58 +18,219 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
+import android.view.View;
+import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.ProgressBar;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.Keep;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class MainActivity extends Activity {
 
-    private static final String TAG = "IdleLineageLauncher";
+    private static final String TAG = "IdleLineageApp";
+    private static final String PREFS_NAME = "GamePrefs";
+    private static final String KEY_CURRENT_VERSION = "current_version";
+    private static final String GITHUB_RELEASE_API = "https://api.github.com/repos/pp771007/idle-lineage-class/releases/latest";
 
     private WebView webView;
-    private ValueCallback<Uri[]> filePathCallback;
-    private final static int FILE_CHOOSER_RESULT_CODE = 10001;
+    private RelativeLayout layoutLoading;
+    private ProgressBar progressBar;
+    private TextView tvLoadingStatus;
 
-    // 現代存檔寫入與 SAF 支援
+    private File gameDir;
+    private SharedPreferences prefs;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private ValueCallback<Uri[]> filePathCallback;
+    private ActivityResultLauncher<Intent> fileChooserLauncher;
     private ActivityResultLauncher<Intent> createDocumentLauncher;
+
     private byte[] pendingSaveBytes = null;
     private String pendingSaveFileName = null;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private static final String SAVE_NAME_PREFIX = "";
+    private String saveHookJs = null;
+    private final static int FILE_CHOOSER_RESULT_CODE = 10001;
+
+    @Keep
+    public class WebAppInterface {
+        @JavascriptInterface
+        @Keep
+        public void saveBase64File(String dataUrlOrBase64, String mimeType, String fileName) {
+            Log.d(TAG, "🎯 [JS 觸發導出] 檔名: " + fileName + " | 長度: " + (dataUrlOrBase64 != null ? dataUrlOrBase64.length() : 0));
+            runOnUiThread(() -> processAndSaveFile(dataUrlOrBase64, mimeType, fileName));
+        }
+
+        @JavascriptInterface
+        @Keep
+        public void pickSaveSlot(String slotsJson) {
+            runOnUiThread(() -> showSlotChooser(slotsJson));
+        }
+
+        @JavascriptInterface
+        @Keep
+        public void log(String message) {
+            Log.d(TAG, "🌐 [SaveHook] " + message);
+        }
+
+        @JavascriptInterface
+        @Keep
+        public void toast(String message) {
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
+        
         checkAllFilesAccessPermission();
+        setContentView(R.layout.activity_main);
+
+        webView = findViewById(R.id.webView);
+        layoutLoading = findViewById(R.id.layoutLoading);
+        progressBar = findViewById(R.id.progressBar);
+        tvLoadingStatus = findViewById(R.id.tvLoadingStatus);
+
+        gameDir = new File(getFilesDir(), "game");
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        initFileChooserLauncher();
         initCreateDocumentLauncher();
-
-        webView = new WebView(this);
-        setContentView(webView);
-
         setupWebView();
+
+        // 預設先載入內建高階啟動器導航介面（使用者可自行於介面中切換線上伺服器與外掛）
         loadNativeLauncherHtml();
     }
 
+    private void showLoadingUI(String statusText) {
+        mainHandler.post(() -> {
+            if (layoutLoading != null) {
+                layoutLoading.setVisibility(View.VISIBLE);
+                tvLoadingStatus.setText(statusText);
+                progressBar.setIndeterminate(true);
+            }
+        });
+    }
+
+    private void updateProgressUI(String statusText, int progress) {
+        mainHandler.post(() -> {
+            if (layoutLoading != null) {
+                layoutLoading.setVisibility(View.VISIBLE);
+                tvLoadingStatus.setText(statusText);
+                if (progress >= 0) {
+                    progressBar.setIndeterminate(false);
+                    progressBar.setProgress(progress);
+                } else {
+                    progressBar.setIndeterminate(true);
+                }
+            }
+        });
+    }
+
+    private void hideLoadingUI() {
+        mainHandler.post(() -> {
+            if (layoutLoading != null) {
+                layoutLoading.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    private void initFileChooserLauncher() {
+        fileChooserLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (filePathCallback == null) return;
+                    Uri[] results = null;
+                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                        Intent dataIntent = result.getData();
+                        if (dataIntent.getData() != null) {
+                            results = new Uri[]{dataIntent.getData()};
+                        } else if (dataIntent.getClipData() != null) {
+                            int count = dataIntent.getClipData().getItemCount();
+                            results = new Uri[count];
+                            for (int i = 0; i < count; i++) {
+                                results[i] = dataIntent.getClipData().getItemAt(i).getUri();
+                            }
+                        }
+                    }
+                    filePathCallback.onReceiveValue(results);
+                    filePathCallback = null;
+                }
+        );
+    }
+
+    private void initCreateDocumentLauncher() {
+        createDocumentLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == RESULT_OK && result.getData() != null && result.getData().getData() != null) {
+                        Uri uri = result.getData().getData();
+                        if (pendingSaveBytes != null) {
+                            try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                                if (os != null) {
+                                    os.write(pendingSaveBytes);
+                                    os.flush();
+                                    Toast.makeText(MainActivity.this, "✅ 檔案已成功儲存！", Toast.LENGTH_SHORT).show();
+                                }
+                            } catch (Exception e) {
+                                showDebugDialog("❌ SAF 寫入失敗", e.getMessage());
+                            } finally {
+                                pendingSaveBytes = null;
+                                pendingSaveFileName = null;
+                            }
+                        }
+                    } else {
+                        pendingSaveBytes = null;
+                        pendingSaveFileName = null;
+                    }
+                }
+        );
+    }
+
     private void setupWebView() {
+        WebView.setWebContentsDebuggingEnabled(true);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -78,44 +242,27 @@ public class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-
-        // 允許背景播放音訊（防止 Android WebView 自動凍結 AudioContext 離線背景流）
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // 監聽原生下載（處理標準 Blob 與一般存檔下載）
-        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-            try {
-                if (url.startsWith("blob:") || url.startsWith("data:")) {
-                    triggerBlobDownload(url);
-                } else {
-                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                    request.setMimeType(mimetype);
-                    request.addRequestHeader("User-Agent", userAgent);
-                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-
-                    String fileName = guessFileName(contentDisposition, url);
-                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
-
-                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                    dm.enqueue(request);
-                    Toast.makeText(this, "📥 已開始下載存檔：" + fileName, Toast.LENGTH_SHORT).show();
-                }
-            } catch (Exception e) {
-                Toast.makeText(this, "❌ 下載失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
-            }
-        });
-
+        // 註冊 A 檔強大完整的 JavaScript 橋接介面
+        webView.addJavascriptInterface(new WebAppInterface(), "AndroidDownloader");
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        // 接管檔案選擇器，支援讀取本地存檔匯入
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
-                                              FileChooserParams fileChooserParams) {
+            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                Log.w(TAG, "🌐 [JS Console] " + consoleMessage.message());
+                return true;
+            }
+
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
                 if (MainActivity.this.filePathCallback != null) {
                     MainActivity.this.filePathCallback.onReceiveValue(null);
                 }
@@ -123,37 +270,59 @@ public class MainActivity extends Activity {
 
                 Intent intent = fileChooserParams.createIntent();
                 try {
-                    startActivityForResult(intent, FILE_CHOOSER_RESULT_CODE);
+                    fileChooserLauncher.launch(intent);
                 } catch (Exception e) {
                     MainActivity.this.filePathCallback = null;
+                    Toast.makeText(getApplicationContext(), "無法開啟檔案選擇器", Toast.LENGTH_SHORT).show();
                     return false;
                 }
                 return true;
             }
-        });
 
-        webView.setWebViewClient(new WebViewClient() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                if (url.startsWith("blob:") || url.startsWith("data:")) {
-                    triggerBlobDownload(url);
+            public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+                String contentToCheck = (defaultValue != null && !defaultValue.isEmpty()) ? defaultValue : message;
+                if (contentToCheck != null && contentToCheck.contains("SIG1:")) {
+                    processAndSaveFile(contentToCheck, "application/json", null);
+                    result.confirm();
                     return true;
                 }
-                return false;
+                return super.onJsPrompt(view, url, message, defaultValue, result);
             }
 
             @Override
-            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                Toast.makeText(MainActivity.this, "⚠️ 網址連線失敗 (404)，請確認網路狀態", Toast.LENGTH_LONG).show();
+            public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                if (message != null && message.contains("SIG1:")) {
+                    processAndSaveFile(message, "application/json", null);
+                    result.confirm();
+                    return true;
+                }
+                return super.onJsAlert(view, url, message, result);
+            }
+        });
+
+        webView.setWebViewClient(new WebViewClient() {
+            private void injectDownloadHook(WebView view) {
+                String js = loadSaveHookJs();
+                if (js != null && !js.isEmpty()) {
+                    view.evaluateJavascript(js, null);
+                }
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                injectDownloadHook(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                injectDownloadHook(view);
+                hideLoadingUI();
 
+                // 當載入遠端線上遊戲伺服器時，自動注入 B 檔強大的【10大外掛模組】與【TMEngine v106.0 防斷線引擎】以及【檔案讀取匯入修復】
                 if (url != null && url.startsWith("http")) {
-                    // 1. 自動注入【10 大外掛模組】(含主外掛 + 9個書籤模組)
                     String totalPluginJs = "(function () {" +
                             "'use strict';" +
                             "if(window.__all_plugins_loaded) return;" +
@@ -193,7 +362,6 @@ public class MainActivity extends Activity {
                             "})();";
                     view.evaluateJavascript(totalPluginJs, null);
 
-                    // 2. 自動注入【TMEngine v106.0 全域極致整合防斷線引擎】
                     String tmEngineJs = "(function() {" +
                             "'use strict';" +
                             "if(window.__tm_engine_loaded) return;" +
@@ -383,7 +551,6 @@ public class MainActivity extends Activity {
                             "})();";
                     view.evaluateJavascript(tmEngineJs, null);
 
-                    // 3. 核心檔案讀取修復
                     String fixImportJs = "(function(){" +
                             "if(window.__fix_import_active) return;" +
                             "window.__fix_import_active = true;" +
@@ -407,6 +574,418 @@ public class MainActivity extends Activity {
                     view.evaluateJavascript(fixImportJs, null);
                 }
             }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.startsWith("data:")) {
+                    processAndSaveFile(url, "application/json", null);
+                    return true;
+                }
+                if (url.startsWith("blob:")) {
+                    triggerBlobDownload(url);
+                    return true;
+                }
+                return super.shouldOverrideUrlLoading(view, request);
+            }
+        });
+
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            if (url != null && url.startsWith("blob:")) {
+                triggerBlobDownload(url);
+            } else {
+                String suggested = null;
+                try {
+                    suggested = URLUtil.guessFileName(url, contentDisposition, mimetype);
+                } catch (Exception ignored) {
+                }
+                final String hint = suggested;
+                Log.d(TAG, "DownloadListener 觸發，建議檔名: " + hint);
+                runOnUiThread(() -> processAndSaveFile(url, "application/json", hint));
+            }
+        });
+    }
+
+    private void processAndSaveFile(String dataUrlOrBase64, String mimeType, String fileName) {
+        if (dataUrlOrBase64 == null || dataUrlOrBase64.isEmpty()) {
+            return;
+        }
+
+        if (dataUrlOrBase64.startsWith("blob:")) {
+            triggerBlobDownload(dataUrlOrBase64);
+            return;
+        }
+
+        try {
+            byte[] bytes;
+
+            if (dataUrlOrBase64.contains("SIG1:")) {
+                String sigData = dataUrlOrBase64.substring(dataUrlOrBase64.indexOf("SIG1:")).trim();
+                bytes = sigData.getBytes(StandardCharsets.UTF_8);
+            } else if (dataUrlOrBase64.trim().startsWith("{") || dataUrlOrBase64.trim().startsWith("[")) {
+                bytes = dataUrlOrBase64.trim().getBytes(StandardCharsets.UTF_8);
+            } else if (dataUrlOrBase64.startsWith("data:")) {
+                int commaIndex = dataUrlOrBase64.indexOf(",");
+                if (commaIndex != -1) {
+                    String header = dataUrlOrBase64.substring(0, commaIndex);
+                    String content = dataUrlOrBase64.substring(commaIndex + 1);
+
+                    if (header.contains(";base64")) {
+                        bytes = Base64.decode(content, Base64.DEFAULT);
+                    } else {
+                        String decodedText = URLDecoder.decode(content, "UTF-8");
+                        bytes = decodedText.getBytes(StandardCharsets.UTF_8);
+                    }
+                } else {
+                    bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
+                }
+            } else if (dataUrlOrBase64.matches("[A-Za-z0-9+/=\\r\\n]{16,}")) {
+                try {
+                    bytes = Base64.decode(dataUrlOrBase64, Base64.DEFAULT);
+                } catch (Exception e) {
+                    bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
+                }
+            } else {
+                bytes = dataUrlOrBase64.getBytes(StandardCharsets.UTF_8);
+            }
+
+            fileName = buildSaveFileName(fileName, bytes);
+            Log.d(TAG, "最終檔名: " + fileName);
+
+            if (writeToDownloads(bytes, fileName, "application/json")) {
+                Toast.makeText(MainActivity.this, "✅ 已匯出：" + fileName, Toast.LENGTH_LONG).show();
+                notifyJsExported();
+            } else {
+                saveViaSAF(bytes, fileName);
+            }
+
+        } catch (Exception e) {
+            showDebugDialog("❌ 資料解析異常", e.toString());
+        }
+    }
+
+    private boolean writeToDownloads(byte[] bytes, String fileName, String mimeType) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+                values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
+                values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                values.put(MediaStore.Downloads.IS_PENDING, 1);
+
+                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (uri != null) {
+                    boolean ok = false;
+                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                        if (os != null) {
+                            os.write(bytes);
+                            os.flush();
+                            ok = true;
+                        }
+                    }
+                    values.clear();
+                    values.put(MediaStore.Downloads.IS_PENDING, 0);
+                    getContentResolver().update(uri, values, null, null);
+                    return ok;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "MediaStore 寫入失敗: " + e.getMessage());
+            }
+            return false;
+        }
+
+        try {
+            File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File file = new File(downloadsDir, fileName);
+            try (FileOutputStream fos = new FileOutputStream(file)) {
+                fos.write(bytes);
+                fos.flush();
+            }
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Direct Write 寫入失敗: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void notifyJsExported() {
+        mainHandler.post(() -> {
+            try {
+                webView.evaluateJavascript("window.__markExported && window.__markExported();", null);
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    private void dumpStorageDiagnostics() {
+        webView.evaluateJavascript("window.__dumpStorage ? window.__dumpStorage() : 'no hook'", value -> {
+            String text;
+            try {
+                Object parsed = new org.json.JSONTokener(value).nextValue();
+                text = String.valueOf(parsed);
+            } catch (Exception e) {
+                text = value;
+            }
+
+            String name = "存檔診斷_" + timestamp() + ".txt";
+            byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+            boolean ok = writeToDownloads(bytes, name, "text/plain");
+
+            Log.d(TAG, "===== 存檔診斷 =====\n" + text);
+            String head = text.length() > 1500 ? text.substring(0, 1500) + "\n…（完整內容看下載的檔案）" : text;
+            showDebugDialog(ok ? "診斷已存成 " + name : "診斷（存檔失敗，內容如下）", head);
+        });
+    }
+
+    private void saveViaSAF(byte[] bytes, String fileName) {
+        this.pendingSaveBytes = bytes;
+        this.pendingSaveFileName = fileName;
+
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+
+        try {
+            createDocumentLauncher.launch(intent);
+        } catch (Exception e) {
+            shareSaveFile(bytes, fileName);
+        }
+    }
+
+    private void shareSaveFile(byte[] data, String fileName) {
+        try {
+            File cacheFile = new File(getCacheDir(), fileName);
+            try (FileOutputStream fos = new FileOutputStream(cacheFile)) {
+                fos.write(data);
+                fos.flush();
+            }
+
+            Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                    this, getPackageName() + ".fileprovider", cacheFile);
+
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("application/json");
+            shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            startActivity(Intent.createChooser(shareIntent, "儲存遊戲存檔: " + fileName));
+        } catch (Exception e) {
+            showDebugDialog("❌ Share 分享選單失敗", e.getMessage());
+        }
+    }
+
+    private String buildSaveFileName(String rawName, byte[] bytes) {
+        String base = rawName == null ? "" : rawName.trim();
+        base = base.replaceAll("(?i)\\.(json|txt|sav|dat|bin)$", "").trim();
+
+        if (base.matches("(?i)(idle[_-]?lineage[_-]?save|save|savefile|download|downloadfile|export|progress|存檔|下載|進度|未命名)?")) {
+            base = "";
+        }
+        if (base.isEmpty()) {
+            base = extractCharInfo(bytes);
+        }
+        if (base.isEmpty()) {
+            base = "存檔_" + timestamp();
+        }
+        if (!SAVE_NAME_PREFIX.isEmpty() && !base.startsWith(SAVE_NAME_PREFIX)) {
+            base = SAVE_NAME_PREFIX + "_" + base;
+        }
+        return sanitizeFileName(base) + ".json";
+    }
+
+    private String mapClass(String raw) {
+        if (raw == null || raw.isEmpty()) return "";
+        String v = raw.trim();
+
+        if (v.matches(".*[\u4e00-\u9fff].*")) {
+            return v.length() > 6 ? v.substring(0, 6) : v;
+        }
+
+        String[] order = {"王子", "騎士", "法師", "妖精", "黑暗妖精", "幻術士", "龍騎士", "戰士"};
+        if (v.matches("\\d{1,2}")) {
+            int i = Integer.parseInt(v);
+            if (i == 0) return order[0];
+            return (i <= order.length) ? order[i - 1] : "";
+        }
+
+        String k = v.toLowerCase().replaceAll("[\\s_\\-]", "");
+        switch (k) {
+            case "prince": case "royal": case "king": case "royalty": return "王子";
+            case "knight": case "kn": return "騎士";
+            case "mage": case "wizard": case "wiz": return "法師";
+            case "elf": return "妖精";
+            case "darkelf": case "de": return "黑暗妖精";
+            case "illusionist": case "illusion": case "il": return "幻術士";
+            case "dragonknight": case "dk": return "龍騎士";
+            case "warrior": case "fighter": case "wa": return "戰士";
+            default: return "";
+        }
+    }
+
+    private String extractCharInfo(byte[] bytes) {
+        try {
+            String text = new String(bytes, StandardCharsets.UTF_8);
+            String probe = text;
+
+            int i = text.indexOf("SIG1:");
+            if (i >= 0) {
+                String body = text.substring(i + 5).trim();
+                int colon = body.indexOf(':');
+                if (colon >= 0) body = body.substring(colon + 1).trim();
+
+                if (body.startsWith("{") || body.startsWith("[")) {
+                    probe = body;
+                } else {
+                    String b64 = body.split("[.|,;\\s]")[0];
+                    try {
+                        String decoded = new String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8);
+                        if (decoded.contains("{")) probe = decoded;
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+
+            if (probe.startsWith("LZ1:")) {
+                Log.d(TAG, "內容是 LZ1 壓縮格式，Java 端不解析");
+                return "";
+            }
+
+            String scope = probe;
+            Matcher pm = Pattern.compile("\"p\"\\s*:\\s*\\{").matcher(probe);
+            if (pm.find()) {
+                int from = pm.start();
+                scope = probe.substring(from, Math.min(from + 3000, probe.length()));
+            }
+
+            String level = firstNumber(scope, new String[]{"charLevel", "level", "lv", "lvl"});
+            if (level.isEmpty()) level = firstNumber(probe, new String[]{"charLevel", "level", "lv", "lvl"});
+
+            String rawClass = firstMatch(scope, new String[]{"cls", "class", "charClass", "className", "job", "career"});
+            if (rawClass.isEmpty()) rawClass = firstNumber(scope, new String[]{"cls", "class", "classId", "job"});
+            String cls = mapClass(rawClass);
+            if (cls.isEmpty()) {
+                String avatar = firstMatch(scope, new String[]{"avatar"});
+                if (!avatar.isEmpty()) {
+                    cls = avatar.replaceAll("^[男女]", "");
+                    if (cls.length() > 6) cls = cls.substring(0, 6);
+                }
+            }
+
+            String out = "";
+            if (!level.isEmpty()) out += level + "等";
+            if (!cls.isEmpty()) out += cls;
+            if (!out.isEmpty()) return out;
+
+            return firstMatch(scope, new String[]{
+                    "charName", "characterName", "playerName", "nickName", "nickname", "cname", "charname", "name"});
+        } catch (Exception e) {
+            Log.w(TAG, "解析角色資訊失敗: " + e.getMessage());
+            return "";
+        }
+    }
+
+    private String firstMatch(String text, String[] keys) {
+        for (String key : keys) {
+            try {
+                Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"\\\\]{1,24})\"").matcher(text);
+                if (m.find()) {
+                    String v = m.group(1).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return "";
+    }
+
+    private String firstNumber(String text, String[] keys) {
+        for (String key : keys) {
+            try {
+                Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(\\d{1,3})").matcher(text);
+                if (m.find()) return m.group(1);
+            } catch (Exception ignored) {
+            }
+        }
+        return "";
+    }
+
+    private String sanitizeFileName(String name) {
+        String out = name.replaceAll("[\\\\/:*?\"<>|\\r\\n\\t\\x00-\\x1f]", "_")
+                .replaceAll("_{2,}", "_")
+                .replaceAll("^[._]+", "")
+                .trim();
+        if (out.length() > 80) out = out.substring(0, 80);
+        return out.isEmpty() ? "存檔" : out;
+    }
+
+    private String timestamp() {
+        return new SimpleDateFormat("yyyyMMdd-HHmm", Locale.TAIWAN).format(new Date());
+    }
+
+    private void showSlotChooser(String slotsJson) {
+        try {
+            JSONArray arr = new JSONArray(slotsJson);
+            if (arr.length() == 0) {
+                new AlertDialog.Builder(this)
+                        .setTitle("找不到任何存檔")
+                        .setMessage("網頁端沒有回報任何存檔欄位。按「診斷」可以把實際的存放內容倒出來檢查。")
+                        .setPositiveButton("關閉", null)
+                        .setNeutralButton("🔍 診斷", (d, w) -> dumpStorageDiagnostics())
+                        .show();
+                return;
+            }
+
+            final String[] keys = new String[arr.length()];
+            final String[] labels = new String[arr.length()];
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.getJSONObject(i);
+                keys[i] = o.optString("key");
+                String label = o.optString("label");
+                if (label.isEmpty()) label = keys[i];
+                labels[i] = label;
+            }
+
+            new AlertDialog.Builder(this)
+                    .setTitle("要匯出哪一個角色？")
+                    .setItems(labels, (dialog, which) -> {
+                        String js = "window.__exportSlotByKey && window.__exportSlotByKey("
+                                + JSONObject.quote(keys[which]) + ");";
+                        webView.evaluateJavascript(js, null);
+                    })
+                    .setNegativeButton("取消", null)
+                    .setNeutralButton("🔍 診斷", (d, w) -> dumpStorageDiagnostics())
+                    .show();
+        } catch (Exception e) {
+            showDebugDialog("❌ 讀取存檔清單失敗", e.toString());
+        }
+    }
+
+    private String loadSaveHookJs() {
+        if (saveHookJs != null) return saveHookJs;
+        try (InputStream is = getAssets().open("save_hook.js");
+             ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = is.read(buffer)) != -1) {
+                bos.write(buffer, 0, read);
+            }
+            saveHookJs = new String(bos.toByteArray(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            Log.e(TAG, "讀取 assets/save_hook.js 失敗", e);
+            saveHookJs = "";
+        }
+        return saveHookJs;
+    }
+
+    private void showDebugDialog(String title, String message) {
+        runOnUiThread(() -> {
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setPositiveButton("確定", null)
+                    .setCancelable(false)
+                    .show();
         });
     }
 
@@ -462,222 +1041,6 @@ public class MainActivity extends Activity {
         webView.evaluateJavascript(js, null);
     }
 
-    // ==================== 智慧解析與先進存檔儲存機制 (吸收自 A) ====================
-
-    private void initCreateDocumentLauncher() {
-        createDocumentLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null && result.getData().getData() != null) {
-                        Uri uri = result.getData().getData();
-                        if (pendingSaveBytes != null) {
-                            try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                                if (os != null) {
-                                    os.write(pendingSaveBytes);
-                                    os.flush();
-                                    Toast.makeText(this, "✅ 檔案已成功儲存！", Toast.LENGTH_SHORT).show();
-                                }
-                            } catch (Exception e) {
-                                Toast.makeText(this, "❌ 寫入失敗: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                            } finally {
-                                pendingSaveBytes = null;
-                                pendingSaveFileName = null;
-                            }
-                        }
-                    } else {
-                        pendingSaveBytes = null;
-                        pendingSaveFileName = null;
-                    }
-                }
-        );
-    }
-
-    private boolean writeToDownloads(byte[] bytes, String fileName) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
-                values.put(MediaStore.Downloads.MIME_TYPE, "application/json");
-                values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
-                values.put(MediaStore.Downloads.IS_PENDING, 1);
-
-                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                if (uri != null) {
-                    boolean ok = false;
-                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                        if (os != null) {
-                            os.write(bytes);
-                            os.flush();
-                            ok = true;
-                        }
-                    }
-                    values.clear();
-                    values.put(MediaStore.Downloads.IS_PENDING, 0);
-                    getContentResolver().update(uri, values, null, null);
-                    return ok;
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "MediaStore 寫入失敗: " + e.getMessage());
-            }
-            return false;
-        }
-
-        try {
-            File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            File file = new File(downloadsDir, fileName);
-            try (FileOutputStream fos = new FileOutputStream(file)) {
-                fos.write(bytes);
-                fos.flush();
-            }
-            return true;
-        } catch (Exception e) {
-            Log.e(TAG, "Direct Write 寫入失敗: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private String buildSmartFileName(String rawName, byte[] bytes) {
-        String base = rawName == null ? "" : rawName.trim();
-        base = base.replaceAll("(?i)\\.(json|txt|sav|dat|bin)$", "").trim();
-
-        if (base.matches("(?i)(idle[_-]?lineage[_-]?save|save|savefile|download|downloadfile|export|progress|存檔|下載|進度|未命名|fable5_save.*)?")) {
-            base = "";
-        }
-        if (base.isEmpty()) {
-            base = extractCharInfo(bytes);
-        }
-        if (base.isEmpty()) {
-            base = "存檔_" + timestamp();
-        }
-        return sanitizeFileName(base) + ".json";
-    }
-
-    private String mapClass(String raw) {
-        if (raw == null || raw.isEmpty()) return "";
-        String v = raw.trim();
-
-        if (v.matches(".*[\u4e00-\u9fff].*")) {
-            return v.length() > 6 ? v.substring(0, 6) : v;
-        }
-
-        String[] order = {"王子", "騎士", "法師", "妖精", "黑暗妖精", "幻術士", "龍騎士", "戰士"};
-        if (v.matches("\\d{1,2}")) {
-            int i = Integer.parseInt(v);
-            if (i == 0) return order[0];
-            return (i <= order.length) ? order[i - 1] : "";
-        }
-
-        String k = v.toLowerCase().replaceAll("[\\s_\\-]", "");
-        switch (k) {
-            case "prince": case "royal": case "king": case "royalty": return "王子";
-            case "knight": case "kn": return "騎士";
-            case "mage": case "wizard": case "wiz": return "法師";
-            case "elf": return "妖精";
-            case "darkelf": case "de": return "黑暗妖精";
-            case "illusionist": case "illusion": case "il": return "幻術士";
-            case "dragonknight": case "dk": return "龍騎士";
-            case "warrior": case "fighter": case "wa": return "戰士";
-            default: return "";
-        }
-    }
-
-    private String extractCharInfo(byte[] bytes) {
-        try {
-            String text = new String(bytes, StandardCharsets.UTF_8);
-            String probe = text;
-
-            int i = text.indexOf("SIG1:");
-            if (i >= 0) {
-                String body = text.substring(i + 5).trim();
-                int colon = body.indexOf(':');
-                if (colon >= 0) body = body.substring(colon + 1).trim();
-
-                if (body.startsWith("{") || body.startsWith("[")) {
-                    probe = body;
-                }
-            }
-
-            if (probe.startsWith("LZ1:")) {
-                return "";
-            }
-
-            String scope = probe;
-            Matcher pm = Pattern.compile("\"p\"\\s*:\\s*\\{").matcher(probe);
-            if (pm.find()) {
-                int from = pm.start();
-                scope = probe.substring(from, Math.min(from + 3000, probe.length()));
-            }
-
-            String level = firstNumber(scope, new String[]{"charLevel", "level", "lv", "lvl"});
-            if (level.isEmpty()) level = firstNumber(probe, new String[]{"charLevel", "level", "lv", "lvl"});
-
-            String rawClass = firstMatch(scope, new String[]{"cls", "class", "charClass", "className", "job", "career"});
-            if (rawClass.isEmpty()) rawClass = firstNumber(scope, new String[]{"cls", "class", "classId", "job"});
-            String cls = mapClass(rawClass);
-
-            String out = "";
-            if (!level.isEmpty()) out += level + "等";
-            if (!cls.isEmpty()) out += cls;
-            if (!out.isEmpty()) return out;
-
-            return firstMatch(scope, new String[]{
-                    "charName", "characterName", "playerName", "nickName", "nickname", "cname", "charname", "name"});
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private String firstMatch(String text, String[] keys) {
-        for (String key : keys) {
-            try {
-                Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"\\\\]{1,24})\"").matcher(text);
-                if (m.find()) {
-                    String v = m.group(1).trim();
-                    if (!v.isEmpty()) return v;
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return "";
-    }
-
-    private String firstNumber(String text, String[] keys) {
-        for (String key : keys) {
-            try {
-                Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(\\d{1,3})").matcher(text);
-                if (m.find()) return m.group(1);
-            } catch (Exception ignored) {
-            }
-        }
-        return "";
-    }
-
-    private String sanitizeFileName(String name) {
-        String out = name.replaceAll("[\\\\/:*?\"<>|\\r\\n\\t\\x00-\\x1f]", "_")
-                .replaceAll("_{2,}", "_")
-                .replaceAll("^[._]+", "")
-                .trim();
-        if (out.length() > 80) out = out.substring(0, 80);
-        return out.isEmpty() ? "存檔" : out;
-    }
-
-    private String timestamp() {
-        return new SimpleDateFormat("yyyyMMdd-HHmm", Locale.TAIWAN).format(new Date());
-    }
-
-    private String guessFileName(String contentDisposition, String url) {
-        String fileName = "存檔_" + timestamp() + ".json";
-        try {
-            if (contentDisposition != null && contentDisposition.contains("filename=")) {
-                fileName = contentDisposition.split("filename=")[1].replace("\"", "").trim();
-            } else if (url != null && url.contains("/")) {
-                String last = url.substring(url.lastIndexOf('/') + 1);
-                if (last.length() > 0 && last.length() < 100) fileName = last;
-            }
-        } catch (Exception ignored) {}
-        return fileName;
-    }
-
     private void checkAllFilesAccessPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
@@ -696,25 +1059,20 @@ public class MainActivity extends Activity {
     public class AndroidBridge {
         @JavascriptInterface
         public void saveBase64File(String base64Data, String fileName) {
-            mainHandler.post(() -> {
+            runOnUiThread(() -> {
                 try {
                     byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
-                    String finalName = buildSmartFileName(fileName, bytes);
-
-                    if (writeToDownloads(bytes, finalName)) {
-                        Toast.makeText(MainActivity.this, "✅ 角色存檔已成功匯出至 Download：\n" + finalName, Toast.LENGTH_LONG).show();
-                    } else {
-                        // 若直接寫入失敗，啟動 SAF 讓使用者自行選擇儲存位置
-                        pendingSaveBytes = bytes;
-                        pendingSaveFileName = finalName;
-                        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-                        intent.addCategory(Intent.CATEGORY_OPENABLE);
-                        intent.setType("application/json");
-                        intent.putExtra(Intent.EXTRA_TITLE, finalName);
-                        createDocumentLauncher.launch(intent);
-                    }
+                    File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                    if (!dir.exists()) dir.mkdirs();
+                    File outFile = new File(dir, fileName);
+                    FileOutputStream fos = new FileOutputStream(outFile);
+                    fos.write(bytes);
+                    fos.close();
+                    Toast.makeText(MainActivity.this,
+                            "✅ 角色存檔已成功匯出至 Download 資料夾：\n" + fileName, Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this,
+                            "❌ 匯出失敗：" + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
         }
